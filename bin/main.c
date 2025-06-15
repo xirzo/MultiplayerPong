@@ -65,8 +65,8 @@ int main(void) {
              EcsOnUpdate, [in] Position, [in] RenderableRectangle);
   ECS_SYSTEM(world, HandlePlayerInputActions,
              EcsOnUpdate, [out] Velocity, [in] PlayerInput);
-
-  ECS_SYSTEM(world, CheckCollision, EcsOnUpdate, [in] Position, [in] Collider);
+  ECS_SYSTEM(world, BallPaddleCollisions, EcsOnUpdate,
+             Position, [inout] Velocity, [in] Collider, Ball);
 
   Input left_paddle_input;
   InitInput(&left_paddle_input);
@@ -75,7 +75,6 @@ int main(void) {
 
   Input right_paddle_input;
   InitInput(&right_paddle_input);
-
   right_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_J;
   right_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_K;
 
@@ -97,21 +96,20 @@ int main(void) {
                                .down_action = ACTION_MOVE_DOWN,
                                .input = &left_paddle_input,
                            }),
-                 ecs_value(Collider,
-                           {
-                               .width = properties.PADDLE_WIDTH,
-                               .height = properties.PADDLE_HEIGHT,
-                           })
-
-      );
+                 ecs_value(Collider, {
+                                         .width = properties.PADDLE_WIDTH,
+                                         .height = properties.PADDLE_HEIGHT,
+                                     }));
 
   ecs_add_id(world, left_paddle, Paddle);
 
   ecs_entity_t right_paddle =
       ecs_insert(world,
-                 ecs_value(Position, {properties.PADDLE_SCREEN_SIZE_MARGIN,
+                 ecs_value(Position, {properties.SCREEN_WIDTH -
+                                          properties.PADDLE_SCREEN_SIZE_MARGIN -
+                                          properties.PADDLE_WIDTH,
                                       (float)properties.SCREEN_HEIGHT / 2 -
-                                          properties.PADDLE_HEIGHT / 2 + 100}),
+                                          properties.PADDLE_HEIGHT / 2}),
                  ecs_value(Velocity, {0, 0}),
                  ecs_value(RenderableRectangle,
                            {
@@ -125,13 +123,10 @@ int main(void) {
                                .down_action = ACTION_MOVE_DOWN,
                                .input = &right_paddle_input,
                            }),
-                 ecs_value(Collider,
-                           {
-                               .width = properties.PADDLE_WIDTH,
-                               .height = properties.PADDLE_HEIGHT,
-                           })
-
-      );
+                 ecs_value(Collider, {
+                                         .width = properties.PADDLE_WIDTH,
+                                         .height = properties.PADDLE_HEIGHT,
+                                     }));
 
   ecs_add_id(world, right_paddle, Paddle);
 
@@ -139,26 +134,27 @@ int main(void) {
       world,
       ecs_value(Position, {.x = (float)properties.SCREEN_WIDTH / 2,
                            .y = (float)properties.SCREEN_HEIGHT / 2}),
-      ecs_value(Velocity, {.x = 0, .y = 0}),
+      ecs_value(Velocity, {.x = 1, .y = 0}),
       ecs_value(RenderableRectangle,
                 {properties.BALL_SIDE, properties.BALL_SIDE, WHITE}),
       ecs_value(Collider, {properties.BALL_SIDE, properties.BALL_SIDE}));
 
   ecs_add_id(world, ball, Ball);
 
+  PaddleData paddle_data = {.left_paddle = left_paddle,
+                            .right_paddle = right_paddle};
+
   while (!WindowShouldClose()) {
     UpdateInput(&left_paddle_input);
     UpdateInput(&right_paddle_input);
 
-    ecs_run(world, ecs_id(CheckCollision), GetFrameTime(), NULL);
+    ecs_run(world, ecs_id(BallPaddleCollisions), GetFrameTime(), &paddle_data);
     ecs_run(world, ecs_id(HandlePlayerInputActions), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(Move), GetFrameTime(), (void *)&properties);
 
     BeginDrawing();
-
-    ecs_run(world, ecs_id(RenderRectangle), GetFrameTime(), NULL);
     ClearBackground(BLACK);
-
+    ecs_run(world, ecs_id(RenderRectangle), GetFrameTime(), NULL);
     EndDrawing();
   }
 

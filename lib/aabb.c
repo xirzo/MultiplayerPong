@@ -1,6 +1,8 @@
 #include "aabb.h"
+#include "movement.h"
+#include <linux/limits.h>
+#include <math.h>
 #include <stddef.h>
-#include <stdio.h>
 
 int Intersect(float x_1_min, float x_1_max, float y_1_min, float y_1_max,
               float x_2_min, float x_2_max, float y_2_min, float y_2_max) {
@@ -17,97 +19,102 @@ int IntersectRects(Rect r_1, Rect r_2) {
                    r_2.x + r_2.width, r_2.y, r_2.y + r_2.height);
 }
 
-void HandleCollision(ecs_entity_t entity_a, ecs_entity_t entity_b,
-                     Position *pos_a, Position *pos_b, Collider *col_a,
-                     Collider *col_b) {
-  float overlap_x = (pos_a->x + col_a->width) - pos_b->x;
+void HandleBallPaddleCollisionPure(float *ball_x, float *ball_y,
+                                   float *ball_vel_x, float *ball_vel_y,
+                                   float ball_width, float ball_height,
+                                   float paddle_x, float paddle_y,
+                                   float paddle_width, float paddle_height) {
+  float ball_center_x = *ball_x + ball_width / 2;
+  float ball_center_y = *ball_y + ball_height / 2;
+  float paddle_center_x = paddle_x + paddle_width / 2;
+  float paddle_center_y = paddle_y + paddle_height / 2;
 
-  if (pos_a->x > pos_b->x) {
-    overlap_x = (pos_b->x + col_b->width) - pos_a->x;
-  }
+  float dx = ball_center_x - paddle_center_x;
+  float dy = ball_center_y - paddle_center_y;
 
-  float overlap_y = (pos_a->y + col_a->height) - pos_b->y;
-  if (pos_a->y > pos_b->y) {
-    overlap_y = (pos_b->y + col_b->height) - pos_a->y;
-  }
+  float overlap_x = (ball_width + paddle_width) / 2 - fabsf(dx);
+  float overlap_y = (ball_height + paddle_height) / 2 - fabsf(dy);
 
   if (overlap_x < overlap_y) {
-    if (pos_a->x < pos_b->x) {
-      pos_a->x -= overlap_x / 2;
-      pos_b->x += overlap_x / 2;
+    *ball_vel_x = -(*ball_vel_x);
+
+    if (dx > 0) {
+      *ball_x = paddle_x + paddle_width;
     } else {
-      pos_a->x += overlap_x / 2;
-      pos_b->x -= overlap_x / 2;
+      *ball_x = paddle_x - ball_width;
     }
+
+    float hit_factor = dy / (paddle_height / 2);
+    *ball_vel_y += hit_factor * PADDLE_SPIN_STRENGTH;
+
   } else {
-    if (pos_a->y < pos_b->y) {
-      pos_a->y -= overlap_y / 2;
-      pos_b->y += overlap_y / 2;
+    *ball_vel_y = -(*ball_vel_y);
+
+    if (dy > 0) {
+      *ball_y = paddle_y + paddle_height;
     } else {
-      pos_a->y += overlap_y / 2;
-      pos_b->y -= overlap_y / 2;
+      *ball_y = paddle_y - ball_height;
     }
+  }
+
+  if (fabsf(*ball_vel_x) > PADDLE_MAX_SPEED) {
+    *ball_vel_x = (*ball_vel_x > 0) ? PADDLE_MAX_SPEED : -PADDLE_MAX_SPEED;
+  }
+  if (fabsf(*ball_vel_y) > PADDLE_MAX_SPEED) {
+    *ball_vel_y = (*ball_vel_y > 0) ? PADDLE_MAX_SPEED : -PADDLE_MAX_SPEED;
   }
 }
 
-void CheckCollision(ecs_iter_t *it) {
-  Position *positions = ecs_field(it, Position, 0);
-  Collider *colliders = ecs_field(it, Collider, 1);
+void BallPaddleCollisions(ecs_iter_t *it) {
+  Position *ball_positions = ecs_field(it, Position, 0);
+  Velocity *ball_velocities = ecs_field(it, Velocity, 1);
+  Collider *ball_colliders = ecs_field(it, Collider, 2);
+
+  PaddleData *paddle_data = (PaddleData *)it->param;
+  ecs_world_t *world = it->world;
+
+  ecs_entity_t position_id = ecs_lookup(world, "Position");
+  ecs_entity_t collider_id = ecs_lookup(world, "Collider");
 
   for (size_t i = 0; i < it->count; i++) {
-    for (size_t j = i + 1; j < it->count; j++) {
-      Position *pos_a = &positions[i];
-      Position *pos_b = &positions[j];
-      Collider *col_a = &colliders[i];
-      Collider *col_b = &colliders[j];
+    Position *ball_pos = &ball_positions[i];
+    Velocity *ball_vel = &ball_velocities[i];
+    Collider *ball_col = &ball_colliders[i];
 
-      int res = IntersectRects((Rect){.x = pos_a->x,
-                                      .y = pos_a->y,
-                                      .width = col_a->width,
-                                      .height = col_a->height},
-                               (Rect){
+    const Position *left_pos =
+        ecs_get_id(world, paddle_data->left_paddle, position_id);
+    const Collider *left_col =
+        ecs_get_id(world, paddle_data->left_paddle, collider_id);
 
-                                   .x = pos_b->x,
-                                   .y = pos_b->y,
-                                   .width = col_b->width,
+    if (left_pos && left_col) {
+      int collision = IntersectRects(
+          (Rect){ball_pos->x, ball_pos->y, ball_col->width, ball_col->height},
+          (Rect){left_pos->x, left_pos->y, left_col->width, left_col->height});
 
-                                   .height = col_b->height});
-
-      if (res) {
-        HandleCollision(it->entities[i], it->entities[j], pos_a, pos_b, col_a,
-                        col_b);
+      if (collision) {
+        HandleBallPaddleCollisionPure(
+            &ball_pos->x, &ball_pos->y, &ball_vel->x, &ball_vel->y,
+            ball_col->width, ball_col->height, left_pos->x, left_pos->y,
+            left_col->width, left_col->height);
       }
     }
-  }
-}
 
-void CheckBallPaddleCollision(ecs_iter_t *it) {
+    const Position *right_pos =
+        ecs_get_id(world, paddle_data->right_paddle, position_id);
+    const Collider *right_col =
+        ecs_get_id(world, paddle_data->right_paddle, collider_id);
 
-  Position *positions = ecs_field(it, Position, 0);
-  Collider *colliders = ecs_field(it, Collider, 1);
+    if (right_pos && right_col) {
+      int collision = IntersectRects(
+          (Rect){ball_pos->x, ball_pos->y, ball_col->width, ball_col->height},
+          (Rect){right_pos->x, right_pos->y, right_col->width,
+                 right_col->height});
 
-  for (size_t i = 0; i < it->count; i++) {
-    for (size_t j = i + 1; j < it->count; j++) {
-      Position *pos_a = &positions[i];
-      Position *pos_b = &positions[j];
-      Collider *col_a = &colliders[i];
-      Collider *col_b = &colliders[j];
-
-      int res = IntersectRects((Rect){.x = pos_a->x,
-                                      .y = pos_a->y,
-                                      .width = col_a->width,
-                                      .height = col_a->height},
-                               (Rect){
-
-                                   .x = pos_b->x,
-                                   .y = pos_b->y,
-                                   .width = col_b->width,
-
-                                   .height = col_b->height});
-
-      if (res) {
-        HandleCollision(it->entities[i], it->entities[j], pos_a, pos_b, col_a,
-                        col_b);
+      if (collision) {
+        HandleBallPaddleCollisionPure(
+            &ball_pos->x, &ball_pos->y, &ball_vel->x, &ball_vel->y,
+            ball_col->width, ball_col->height, right_pos->x, right_pos->y,
+            right_col->width, right_col->height);
       }
     }
   }
