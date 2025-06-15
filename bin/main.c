@@ -47,6 +47,8 @@ int main(void) {
       .PADDLE_HEIGHT = 80.f,
       .PADDLE_SCREEN_SIZE_MARGIN = 50.f,
       .BALL_SIDE = 10.f,
+      .BALL_INITIAL_VELOCITY_X = 300.f,
+      .BALL_INITIAL_VELOCITY_Y = -500.f,
       .WALL_THICKNESS = 10.f,
   };
 
@@ -142,7 +144,8 @@ int main(void) {
       world,
       ecs_value(Position, {.x = (float)properties.SCREEN_WIDTH / 2,
                            .y = (float)properties.SCREEN_HEIGHT / 2}),
-      ecs_value(Velocity, {.x = 300, .y = -500}),
+      ecs_value(Velocity, {.x = properties.BALL_INITIAL_VELOCITY_X,
+                           .y = properties.BALL_INITIAL_VELOCITY_Y}),
       ecs_value(RenderableRectangle,
                 {properties.BALL_SIDE, properties.BALL_SIDE, WHITE}),
       ecs_value(Collider, {properties.BALL_SIDE, properties.BALL_SIDE}));

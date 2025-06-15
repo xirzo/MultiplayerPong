@@ -10,6 +10,8 @@ typedef struct Properties {
   float PADDLE_HEIGHT;
   float PADDLE_SCREEN_SIZE_MARGIN;
   float BALL_SIDE;
+  float BALL_INITIAL_VELOCITY_X;
+  float BALL_INITIAL_VELOCITY_Y;
   float WALL_THICKNESS;
 } Properties;
 
