@@ -8,9 +8,7 @@ void Move(ecs_iter_t *it) {
   const Properties *properties = (Properties *)it->param;
 
   for (size_t i = 0; i < it->count; i++) {
-    positions[i].x +=
-        velocities[i].x * it->delta_time * properties->PADDLE_SPEED;
-    positions[i].y +=
-        velocities[i].y * it->delta_time * properties->PADDLE_SPEED;
+    positions[i].x += velocities[i].x * it->delta_time;
+    positions[i].y += velocities[i].y * it->delta_time;
   }
 }

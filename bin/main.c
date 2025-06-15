@@ -7,6 +7,7 @@
 #include "render.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define UP_DIRECTION -1.f
 #define DOWN_DIRECTION 1.f
@@ -21,15 +22,17 @@ void HandlePlayerInputActions(ecs_iter_t *it) {
   Velocity *velocities = ecs_field(it, Velocity, 0);
   PlayerInput *inputs = ecs_field(it, PlayerInput, 1);
 
+  Properties *properties = (Properties *)it->param;
+
   for (size_t i = 0; i < it->count; i++) {
     velocities[i].y = 0;
     Input *input = inputs[i].input;
 
     if (IsActionPressed(input, inputs[i].up_action)) {
-      velocities[i].y = UP_DIRECTION;
+      velocities[i].y = UP_DIRECTION * properties->PADDLE_SPEED;
     }
     if (IsActionPressed(input, inputs[i].down_action)) {
-      velocities[i].y = DOWN_DIRECTION;
+      velocities[i].y = DOWN_DIRECTION * properties->PADDLE_SPEED;
     }
   }
 }
@@ -39,11 +42,12 @@ int main(void) {
       .SCREEN_WIDTH = 1280,
       .SCREEN_HEIGHT = 720,
       .FPS_LOCK = 60,
-      .PADDLE_SPEED = 100.f,
+      .PADDLE_SPEED = 350.f,
       .PADDLE_WIDTH = 20.f,
       .PADDLE_HEIGHT = 80.f,
       .PADDLE_SCREEN_SIZE_MARGIN = 50.f,
       .BALL_SIDE = 10.f,
+      .WALL_THICKNESS = 10.f,
   };
 
   InitWindow(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, "game");
@@ -59,6 +63,7 @@ int main(void) {
 
   ECS_TAG(world, Ball);
   ECS_TAG(world, Paddle);
+  ECS_TAG(world, Wall);
 
   ECS_SYSTEM(world, Move, EcsOnUpdate, Position, [in] Velocity);
   ECS_SYSTEM(world, RenderRectangle,
@@ -66,6 +71,9 @@ int main(void) {
   ECS_SYSTEM(world, HandlePlayerInputActions,
              EcsOnUpdate, [out] Velocity, [in] PlayerInput);
   ECS_SYSTEM(world, BallPaddleCollisions, EcsOnUpdate,
+             Position, [inout] Velocity, [in] Collider, Ball);
+
+  ECS_SYSTEM(world, BallWallCollisions, EcsOnUpdate,
              Position, [inout] Velocity, [in] Collider, Ball);
 
   Input left_paddle_input;
@@ -134,7 +142,7 @@ int main(void) {
       world,
       ecs_value(Position, {.x = (float)properties.SCREEN_WIDTH / 2,
                            .y = (float)properties.SCREEN_HEIGHT / 2}),
-      ecs_value(Velocity, {.x = 1, .y = 0}),
+      ecs_value(Velocity, {.x = 300, .y = -500}),
       ecs_value(RenderableRectangle,
                 {properties.BALL_SIDE, properties.BALL_SIDE, WHITE}),
       ecs_value(Collider, {properties.BALL_SIDE, properties.BALL_SIDE}));
@@ -144,12 +152,30 @@ int main(void) {
   PaddleData paddle_data = {.left_paddle = left_paddle,
                             .right_paddle = right_paddle};
 
+  ecs_entity_t upper_wall =
+      ecs_insert(world, ecs_value(Position, {.x = 0, .y = 0}),
+                 ecs_value(Collider, {properties.SCREEN_WIDTH,
+                                      properties.WALL_THICKNESS}));
+
+  ecs_entity_t lower_wall = ecs_insert(
+      world,
+      ecs_value(
+          Position,
+          {.x = 0, .y = properties.SCREEN_HEIGHT - properties.WALL_THICKNESS}),
+      ecs_value(Collider,
+                {properties.SCREEN_WIDTH, properties.WALL_THICKNESS}));
+
+  ecs_add_id(world, upper_wall, Wall);
+  ecs_add_id(world, lower_wall, Wall);
+
   while (!WindowShouldClose()) {
     UpdateInput(&left_paddle_input);
     UpdateInput(&right_paddle_input);
 
     ecs_run(world, ecs_id(BallPaddleCollisions), GetFrameTime(), &paddle_data);
-    ecs_run(world, ecs_id(HandlePlayerInputActions), GetFrameTime(), NULL);
+    ecs_run(world, ecs_id(BallWallCollisions), GetFrameTime(), NULL);
+    ecs_run(world, ecs_id(HandlePlayerInputActions), GetFrameTime(),
+            (void *)&properties);
     ecs_run(world, ecs_id(Move), GetFrameTime(), (void *)&properties);
 
     BeginDrawing();
@@ -162,3 +188,6 @@ int main(void) {
   ecs_fini(world);
   return 0;
 }
+
+// TODO: clamp player movement
+// TODO: add score
