@@ -6,9 +6,6 @@
 #include "raylib.h"
 #include "render.h"
 #include "score.h"
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 #define DEBUGGING
 
@@ -53,6 +50,7 @@ int main(void) {
       .BALL_MAX_SPEED = 650.f,
       .BALL_INITIAL_DIRECTION = {0.7f, -0.7f},
       .WALL_THICKNESS = 10.f,
+      .MIDDLE_LINE_WIDTH = 10.f,
   };
 
   InitWindow(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, "game");
@@ -224,6 +222,9 @@ int main(void) {
 
     BeginDrawing();
     ClearBackground(BLACK);
+
+    DrawRectangle(properties.SCREEN_WIDTH / 2, 0, properties.MIDDLE_LINE_WIDTH,
+                  properties.SCREEN_HEIGHT, WHITE);
 
 #ifdef DEBUGGING
     const Position *ball_pos = ecs_get(world, ball, Position);

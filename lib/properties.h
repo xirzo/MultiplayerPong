@@ -16,6 +16,7 @@ typedef struct Properties {
   float BALL_MAX_SPEED;
   vec2 BALL_INITIAL_DIRECTION;
   float WALL_THICKNESS;
+  float MIDDLE_LINE_WIDTH;
 } Properties;
 
 #endif // !PROPERTIES_H
