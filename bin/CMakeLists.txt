@@ -7,3 +7,6 @@ if (NOT MSVC)
 endif()
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/lib)
+
+add_executable(pong_server server.c)
+add_executable(pong_client client.c)
