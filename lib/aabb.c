@@ -36,42 +36,24 @@ void BounceBallWithMovement(Position *ball_pos, BallMovement *ball_movement,
 
   if (overlap_x < overlap_y) {
     ball_movement->direction.x = -ball_movement->direction.x;
-
-    if (dx > 0) {
-      ball_pos->x = target_x + target_width;
-    } else {
-      ball_pos->x = target_x - ball_width;
-    }
-
-    float hit_factor = dy / (target_height / 2);
-
-    ball_movement->direction.y += hit_factor * spin_strength * 0.1f;
-
   } else {
     ball_movement->direction.y = -ball_movement->direction.y;
-
-    if (dy > 0) {
-      ball_pos->y = target_y + target_height;
-    } else {
-      ball_pos->y = target_y - ball_height;
-    }
   }
 
   vec2_normalize(&ball_movement->direction);
 
-  float current_speed = vec2_magnitude(&ball_movement->velocity);
-  if (current_speed < ball_movement->min_speed) {
-    current_speed = ball_movement->min_speed;
+  if (ball_movement->current_speed < ball_movement->min_speed) {
+    ball_movement->current_speed = ball_movement->min_speed;
   }
 
-  current_speed *= BOUNCE_SPEED_INCREASE_MULTIPLIER;
+  ball_movement->current_speed *= BOUNCE_SPEED_INCREASE_MULTIPLIER;
 
-  if (current_speed > ball_movement->max_speed) {
-    current_speed = ball_movement->max_speed;
+  if (ball_movement->current_speed > ball_movement->max_speed) {
+    ball_movement->current_speed = ball_movement->max_speed;
   }
 
   ball_movement->velocity = ball_movement->direction;
-  vec2_multiply(&ball_movement->velocity, current_speed);
+  vec2_multiply(&ball_movement->velocity, ball_movement->current_speed);
 }
 
 void BallWallCollisions(ecs_iter_t *it) {

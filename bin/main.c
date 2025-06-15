@@ -175,6 +175,7 @@ int main(void) {
                            .y = (float)properties.SCREEN_HEIGHT / 2}),
       ecs_value(BallMovement,
                 {
+                    .current_speed = properties.BALL_MIN_SPEED,
                     .min_speed = properties.BALL_MIN_SPEED,
                     .max_speed = properties.BALL_MAX_SPEED,
                     .direction = properties.BALL_INITIAL_DIRECTION,

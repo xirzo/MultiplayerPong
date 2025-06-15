@@ -1,6 +1,7 @@
 #include "movement.h"
 #include "utils.h"
 #include <stddef.h>
+#include <stdio.h>
 
 void MoveBall(ecs_iter_t *it) {
   Position *positions = ecs_field(it, Position, 0);
@@ -10,33 +11,24 @@ void MoveBall(ecs_iter_t *it) {
     Position *pos = &positions[i];
     BallMovement *movement = &movements[i];
 
-    float current_speed = vec2_magnitude(&movement->velocity);
-
-    if (current_speed < 0.001f) {
-      float direction_magnitude = vec2_magnitude(&movement->direction);
-
-      if (direction_magnitude > 0.001f) {
-        current_speed = movement->min_speed;
-      }
+    if (movement->current_speed < movement->min_speed) {
+      movement->current_speed = movement->min_speed;
+    } else if (movement->current_speed > movement->max_speed) {
+      movement->current_speed = movement->max_speed;
     }
 
-    if (current_speed < movement->min_speed) {
-      current_speed = movement->min_speed;
-    } else if (current_speed > movement->max_speed) {
-      current_speed = movement->max_speed;
-    }
+    float direction_magnitude = vec2_magnitude(&movement->direction);
 
-    vec2 normalized_direction = movement->direction;
-    vec2_normalize(&normalized_direction);
+    vec2_normalize(&movement->direction);
 
-    vec2 displacement = normalized_direction;
-    vec2_multiply(&displacement, current_speed * it->delta_time);
+    vec2 displacement = movement->direction;
+    vec2_multiply(&displacement, movement->current_speed * it->delta_time);
 
     pos->x += displacement.x;
     pos->y += displacement.y;
 
-    movement->velocity = normalized_direction;
-    vec2_multiply(&movement->velocity, current_speed);
+    movement->velocity = movement->direction;
+    vec2_multiply(&movement->velocity, movement->current_speed);
   }
 }
 

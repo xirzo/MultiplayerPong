@@ -11,5 +11,7 @@ float vec2_magnitude(vec2 *v) { return sqrt(v->x * v->x + v->y * v->y); }
 void vec2_normalize(vec2 *v) {
   float mag = vec2_magnitude(v);
 
-  vec2_multiply(v, mag);
+  if (mag > 0.001f) {
+    vec2_multiply(v, 1.0f / mag);
+  }
 }

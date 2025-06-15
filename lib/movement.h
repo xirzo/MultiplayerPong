@@ -4,7 +4,7 @@
 #include "flecs.h"
 #include "utils.h"
 
-#define BOUNCE_SPEED_INCREASE_MULTIPLIER 1.02f
+#define BOUNCE_SPEED_INCREASE_MULTIPLIER 1.01f
 
 typedef struct Position {
   float x;
@@ -14,6 +14,7 @@ typedef struct Position {
 typedef struct BallMovement {
   float min_speed;
   float max_speed;
+  float current_speed;
   vec2 direction;
   vec2 velocity;
 } BallMovement;
