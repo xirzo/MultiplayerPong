@@ -12,11 +12,6 @@ Currently I`ll support only rectangle colliders
 #define PADDLE_SPIN_STRENGTH 50.0f
 #define PADDLE_MAX_SPEED 500.0f
 
-typedef struct PaddleData {
-  ecs_entity_t left_paddle;
-  ecs_entity_t right_paddle;
-} PaddleData;
-
 typedef struct Collider {
   float width;
   float height;

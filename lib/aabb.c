@@ -111,49 +111,47 @@ void BallPaddleCollisions(ecs_iter_t *it) {
   Velocity *ball_velocities = ecs_field(it, Velocity, 1);
   Collider *ball_colliders = ecs_field(it, Collider, 2);
 
-  PaddleData *paddle_data = (PaddleData *)it->param;
   ecs_world_t *world = it->world;
 
   ecs_entity_t position_id = ecs_lookup(world, "Position");
   ecs_entity_t collider_id = ecs_lookup(world, "Collider");
+
+  ecs_query_t *paddle_query =
+      ecs_query(it->world, {
+                               .terms =
+                                   {
+                                       {.id = ecs_lookup(world, "Position")},
+                                       {.id = ecs_lookup(world, "Collider")},
+                                       {.id = ecs_lookup(world, "Paddle")},
+                                   },
+                           });
 
   for (size_t i = 0; i < it->count; i++) {
     Position *ball_pos = &ball_positions[i];
     Velocity *ball_vel = &ball_velocities[i];
     Collider *ball_col = &ball_colliders[i];
 
-    const Position *left_pos =
-        ecs_get_id(world, paddle_data->left_paddle, position_id);
-    const Collider *left_col =
-        ecs_get_id(world, paddle_data->left_paddle, collider_id);
+    ecs_iter_t paddle_it = ecs_query_iter(it->world, paddle_query);
 
-    if (left_pos && left_col) {
-      int collision = IntersectRects(
-          (Rect){ball_pos->x, ball_pos->y, ball_col->width, ball_col->height},
-          (Rect){left_pos->x, left_pos->y, left_col->width, left_col->height});
+    while (ecs_query_next(&paddle_it)) {
+      Position *paddle_positions = ecs_field(&paddle_it, Position, 0);
+      Collider *paddle_colliders = ecs_field(&paddle_it, Collider, 1);
 
-      if (collision) {
-        BounceBall(&ball_pos->x, &ball_pos->y, &ball_vel->x, &ball_vel->y,
-                   ball_col->width, ball_col->height, left_pos->x, left_pos->y,
-                   left_col->width, left_col->height);
-      }
-    }
+      for (size_t i = 0; i < paddle_it.count; i++) {
+        Position *paddle_position = &paddle_positions[i];
+        Collider *paddle_collider = &paddle_colliders[i];
 
-    const Position *right_pos =
-        ecs_get_id(world, paddle_data->right_paddle, position_id);
-    const Collider *right_col =
-        ecs_get_id(world, paddle_data->right_paddle, collider_id);
+        int collision = IntersectRects(
+            (Rect){ball_pos->x, ball_pos->y, ball_col->width, ball_col->height},
+            (Rect){paddle_position->x, paddle_position->y,
+                   paddle_collider->width, paddle_collider->height});
 
-    if (right_pos && right_col) {
-      int collision = IntersectRects(
-          (Rect){ball_pos->x, ball_pos->y, ball_col->width, ball_col->height},
-          (Rect){right_pos->x, right_pos->y, right_col->width,
-                 right_col->height});
-
-      if (collision) {
-        BounceBall(&ball_pos->x, &ball_pos->y, &ball_vel->x, &ball_vel->y,
-                   ball_col->width, ball_col->height, right_pos->x,
-                   right_pos->y, right_col->width, right_col->height);
+        if (collision) {
+          BounceBall(&ball_pos->x, &ball_pos->y, &ball_vel->x, &ball_vel->y,
+                     ball_col->width, ball_col->height, paddle_position->x,
+                     paddle_position->y, paddle_collider->width,
+                     paddle_collider->height);
+        }
       }
     }
   }

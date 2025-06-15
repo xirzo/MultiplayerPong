@@ -78,13 +78,13 @@ int main(void) {
 
   Input left_paddle_input;
   InitInput(&left_paddle_input);
-  left_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_S;
-  left_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_D;
+  left_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_W;
+  left_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_S;
 
   Input right_paddle_input;
   InitInput(&right_paddle_input);
-  right_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_J;
-  right_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_K;
+  right_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_UP;
+  right_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_DOWN;
 
   ecs_entity_t left_paddle =
       ecs_insert(world,
@@ -149,9 +149,6 @@ int main(void) {
 
   ecs_add_id(world, ball, Ball);
 
-  PaddleData paddle_data = {.left_paddle = left_paddle,
-                            .right_paddle = right_paddle};
-
   ecs_entity_t upper_wall =
       ecs_insert(world, ecs_value(Position, {.x = 0, .y = 0}),
                  ecs_value(Collider, {properties.SCREEN_WIDTH,
@@ -172,7 +169,7 @@ int main(void) {
     UpdateInput(&left_paddle_input);
     UpdateInput(&right_paddle_input);
 
-    ecs_run(world, ecs_id(BallPaddleCollisions), GetFrameTime(), &paddle_data);
+    ecs_run(world, ecs_id(BallPaddleCollisions), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(BallWallCollisions), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(HandlePlayerInputActions), GetFrameTime(),
             (void *)&properties);
