@@ -192,10 +192,7 @@ int main(void) {
                                       properties.WALL_THICKNESS}));
 
   ecs_entity_t lower_wall = ecs_insert(
-      world,
-      ecs_value(
-          Position,
-          {.x = 0, .y = properties.SCREEN_HEIGHT - properties.PADDLE_HEIGHT}),
+      world, ecs_value(Position, {.x = 0, .y = properties.SCREEN_HEIGHT}),
       ecs_value(Collider,
                 {properties.SCREEN_WIDTH, properties.WALL_THICKNESS}));
 
