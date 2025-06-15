@@ -2,13 +2,8 @@
 
 void InitInput(Input *input) {
   for (size_t i = 0; i < ILLEGAL; i++) {
-    input->bindings[i] = (InputBinding){ILLEGAL, 0, 0, 0};
+    input->bindings[i] = (InputBinding){i, 0, 0, 0};
   }
-
-  input->bindings[ACTION_MOVE_UP] =
-      (InputBinding){.action = ACTION_MOVE_UP, .key = KEY_W, .is_pressed = 0, .was_pressed = 0};
-  input->bindings[ACTION_MOVE_DOWN] =
-      (InputBinding){.action = ACTION_MOVE_DOWN, .key = KEY_S, .is_pressed = 0, .was_pressed = 0};
 }
 
 void UpdateInput(Input *input) {
