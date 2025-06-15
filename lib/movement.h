@@ -2,17 +2,29 @@
 #define MOVEMENT_H
 
 #include "flecs.h"
+#include "utils.h"
+
+#define BOUNCE_SPEED_INCREASE_MULTIPLIER 1.02f
 
 typedef struct Position {
   float x;
   float y;
 } Position;
 
-typedef struct Velocity {
-  float x;
-  float y;
-} Velocity;
+typedef struct BallMovement {
+  float min_speed;
+  float max_speed;
+  vec2 direction;
+  vec2 velocity;
+} BallMovement;
 
-void Move(ecs_iter_t *it);
+typedef struct PaddleMovement {
+  float speed;
+  vec2 direction;
+  vec2 velocity;
+} PaddleMovement;
+
+void MoveBall(ecs_iter_t *it);
+void MovePaddle(ecs_iter_t *it);
 
 #endif // !MOVEMENT_H

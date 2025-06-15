@@ -1,6 +1,6 @@
 add_executable(${PROJECT_NAME} main.c)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC flecs raylib input movement render aabb)
+target_link_libraries(${PROJECT_NAME} PUBLIC flecs raylib input movement render aabb utils)
 
 if (NOT MSVC)
     target_link_libraries(${PROJECT_NAME} PUBLIC m)

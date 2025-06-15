@@ -10,7 +10,6 @@ int Intersect(float x_1_min, float x_1_max, float y_1_min, float y_1_max,
       y_1_max >= y_2_min) {
     return 1;
   }
-
   return 0;
 }
 
@@ -19,54 +18,65 @@ int IntersectRects(Rect r_1, Rect r_2) {
                    r_2.x + r_2.width, r_2.y, r_2.y + r_2.height);
 }
 
-void BounceBall(float *ball_x, float *ball_y, float *ball_vel_x,
-                float *ball_vel_y, float ball_width, float ball_height,
-                float target_x, float target_y, float target_width,
-                float target_height) {
-  float ball_center_x = *ball_x + ball_width / 2;
-  float ball_center_y = *ball_y + ball_height / 2;
-  float paddle_center_x = target_x + target_width / 2;
-  float paddle_center_y = target_y + target_height / 2;
+void BounceBallWithMovement(Position *ball_pos, BallMovement *ball_movement,
+                            float ball_width, float ball_height, float target_x,
+                            float target_y, float target_width,
+                            float target_height, float spin_strength) {
 
-  float dx = ball_center_x - paddle_center_x;
-  float dy = ball_center_y - paddle_center_y;
+  float ball_center_x = ball_pos->x + ball_width / 2;
+  float ball_center_y = ball_pos->y + ball_height / 2;
+  float target_center_x = target_x + target_width / 2;
+  float target_center_y = target_y + target_height / 2;
+
+  float dx = ball_center_x - target_center_x;
+  float dy = ball_center_y - target_center_y;
 
   float overlap_x = (ball_width + target_width) / 2 - fabsf(dx);
   float overlap_y = (ball_height + target_height) / 2 - fabsf(dy);
 
   if (overlap_x < overlap_y) {
-    *ball_vel_x = -(*ball_vel_x);
+    ball_movement->direction.x = -ball_movement->direction.x;
 
     if (dx > 0) {
-      *ball_x = target_x + target_width;
+      ball_pos->x = target_x + target_width;
     } else {
-      *ball_x = target_x - ball_width;
+      ball_pos->x = target_x - ball_width;
     }
 
     float hit_factor = dy / (target_height / 2);
-    *ball_vel_y += hit_factor * PADDLE_SPIN_STRENGTH;
+
+    ball_movement->direction.y += hit_factor * spin_strength * 0.1f;
 
   } else {
-    *ball_vel_y = -(*ball_vel_y);
+    ball_movement->direction.y = -ball_movement->direction.y;
 
     if (dy > 0) {
-      *ball_y = target_y + target_height;
+      ball_pos->y = target_y + target_height;
     } else {
-      *ball_y = target_y - ball_height;
+      ball_pos->y = target_y - ball_height;
     }
   }
 
-  if (fabsf(*ball_vel_x) > PADDLE_MAX_SPEED) {
-    *ball_vel_x = (*ball_vel_x > 0) ? PADDLE_MAX_SPEED : -PADDLE_MAX_SPEED;
+  vec2_normalize(&ball_movement->direction);
+
+  float current_speed = vec2_magnitude(&ball_movement->velocity);
+  if (current_speed < ball_movement->min_speed) {
+    current_speed = ball_movement->min_speed;
   }
-  if (fabsf(*ball_vel_y) > PADDLE_MAX_SPEED) {
-    *ball_vel_y = (*ball_vel_y > 0) ? PADDLE_MAX_SPEED : -PADDLE_MAX_SPEED;
+
+  current_speed *= BOUNCE_SPEED_INCREASE_MULTIPLIER;
+
+  if (current_speed > ball_movement->max_speed) {
+    current_speed = ball_movement->max_speed;
   }
+
+  ball_movement->velocity = ball_movement->direction;
+  vec2_multiply(&ball_movement->velocity, current_speed);
 }
 
 void BallWallCollisions(ecs_iter_t *it) {
   Position *ball_positions = ecs_field(it, Position, 0);
-  Velocity *ball_velocities = ecs_field(it, Velocity, 1);
+  BallMovement *ball_movements = ecs_field(it, BallMovement, 1);
   Collider *ball_colliders = ecs_field(it, Collider, 2);
 
   ecs_world_t *world = it->world;
@@ -78,10 +88,10 @@ void BallWallCollisions(ecs_iter_t *it) {
 
   for (size_t i = 0; i < it->count; i++) {
     Position *ball_pos = &ball_positions[i];
-    Velocity *ball_vel = &ball_velocities[i];
+    BallMovement *ball_movement = &ball_movements[i];
     Collider *ball_col = &ball_colliders[i];
 
-    ecs_iter_t wall_it = ecs_query_iter(it->world, wall_query);
+    ecs_iter_t wall_it = ecs_query_iter(world, wall_query);
 
     while (ecs_query_next(&wall_it)) {
       Position *wall_positions = ecs_field(&wall_it, Position, 0);
@@ -97,49 +107,45 @@ void BallWallCollisions(ecs_iter_t *it) {
                    wall_col->height});
 
         if (collision) {
-          BounceBall(&ball_pos->x, &ball_pos->y, &ball_vel->x, &ball_vel->y,
-                     ball_col->width, ball_col->height, wall_pos->x,
-                     wall_pos->y, wall_col->width, wall_col->height);
+          BounceBallWithMovement(ball_pos, ball_movement, ball_col->width,
+                                 ball_col->height, wall_pos->x, wall_pos->y,
+                                 wall_col->width, wall_col->height, 0.0f);
         }
       }
     }
   }
+
+  ecs_query_fini(wall_query);
 }
 
 void BallPaddleCollisions(ecs_iter_t *it) {
   Position *ball_positions = ecs_field(it, Position, 0);
-  Velocity *ball_velocities = ecs_field(it, Velocity, 1);
+  BallMovement *ball_movements = ecs_field(it, BallMovement, 1);
   Collider *ball_colliders = ecs_field(it, Collider, 2);
 
   ecs_world_t *world = it->world;
 
-  ecs_entity_t position_id = ecs_lookup(world, "Position");
-  ecs_entity_t collider_id = ecs_lookup(world, "Collider");
-
   ecs_query_t *paddle_query =
-      ecs_query(it->world, {
-                               .terms =
-                                   {
-                                       {.id = ecs_lookup(world, "Position")},
-                                       {.id = ecs_lookup(world, "Collider")},
-                                       {.id = ecs_lookup(world, "Paddle")},
-                                   },
-                           });
+      ecs_query(world, {.terms = {
+                            {.id = ecs_lookup(world, "Position")},
+                            {.id = ecs_lookup(world, "Collider")},
+                            {.id = ecs_lookup(world, "Paddle")},
+                        }});
 
   for (size_t i = 0; i < it->count; i++) {
     Position *ball_pos = &ball_positions[i];
-    Velocity *ball_vel = &ball_velocities[i];
+    BallMovement *ball_movement = &ball_movements[i];
     Collider *ball_col = &ball_colliders[i];
 
-    ecs_iter_t paddle_it = ecs_query_iter(it->world, paddle_query);
+    ecs_iter_t paddle_it = ecs_query_iter(world, paddle_query);
 
     while (ecs_query_next(&paddle_it)) {
       Position *paddle_positions = ecs_field(&paddle_it, Position, 0);
       Collider *paddle_colliders = ecs_field(&paddle_it, Collider, 1);
 
-      for (size_t i = 0; i < paddle_it.count; i++) {
-        Position *paddle_position = &paddle_positions[i];
-        Collider *paddle_collider = &paddle_colliders[i];
+      for (size_t j = 0; j < paddle_it.count; j++) {
+        Position *paddle_position = &paddle_positions[j];
+        Collider *paddle_collider = &paddle_colliders[j];
 
         int collision = IntersectRects(
             (Rect){ball_pos->x, ball_pos->y, ball_col->width, ball_col->height},
@@ -147,12 +153,14 @@ void BallPaddleCollisions(ecs_iter_t *it) {
                    paddle_collider->width, paddle_collider->height});
 
         if (collision) {
-          BounceBall(&ball_pos->x, &ball_pos->y, &ball_vel->x, &ball_vel->y,
-                     ball_col->width, ball_col->height, paddle_position->x,
-                     paddle_position->y, paddle_collider->width,
-                     paddle_collider->height);
+          BounceBallWithMovement(ball_pos, ball_movement, ball_col->width,
+                                 ball_col->height, paddle_position->x,
+                                 paddle_position->y, paddle_collider->width,
+                                 paddle_collider->height, 0.f);
         }
       }
     }
   }
+
+  ecs_query_fini(paddle_query);
 }

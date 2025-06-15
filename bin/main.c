@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define DEBUGGING
+
 #define UP_DIRECTION -1.f
 #define DOWN_DIRECTION 1.f
 
@@ -19,20 +21,19 @@ typedef struct PlayerInput {
 } PlayerInput;
 
 void HandlePlayerInputActions(ecs_iter_t *it) {
-  Velocity *velocities = ecs_field(it, Velocity, 0);
+  PaddleMovement *movements = ecs_field(it, PaddleMovement, 0);
   PlayerInput *inputs = ecs_field(it, PlayerInput, 1);
 
-  Properties *properties = (Properties *)it->param;
-
   for (size_t i = 0; i < it->count; i++) {
-    velocities[i].y = 0;
+    movements[i].direction.y = 0;
+
     Input *input = inputs[i].input;
 
     if (IsActionPressed(input, inputs[i].up_action)) {
-      velocities[i].y = UP_DIRECTION * properties->PADDLE_SPEED;
+      movements[i].direction.y = UP_DIRECTION;
     }
     if (IsActionPressed(input, inputs[i].down_action)) {
-      velocities[i].y = DOWN_DIRECTION * properties->PADDLE_SPEED;
+      movements[i].direction.y = DOWN_DIRECTION;
     }
   }
 }
@@ -42,13 +43,14 @@ int main(void) {
       .SCREEN_WIDTH = 1280,
       .SCREEN_HEIGHT = 720,
       .FPS_LOCK = 60,
-      .PADDLE_SPEED = 350.f,
+      .PADDLE_SPEED = 450.f,
       .PADDLE_WIDTH = 20.f,
       .PADDLE_HEIGHT = 80.f,
       .PADDLE_SCREEN_SIZE_MARGIN = 50.f,
       .BALL_SIDE = 10.f,
-      .BALL_INITIAL_VELOCITY_X = 300.f,
-      .BALL_INITIAL_VELOCITY_Y = -500.f,
+      .BALL_MIN_SPEED = 450.f,
+      .BALL_MAX_SPEED = 650.f,
+      .BALL_INITIAL_DIRECTION = {0.7f, -0.7f},
       .WALL_THICKNESS = 10.f,
   };
 
@@ -58,7 +60,8 @@ int main(void) {
   ecs_world_t *world = ecs_init();
 
   ECS_COMPONENT(world, Position);
-  ECS_COMPONENT(world, Velocity);
+  ECS_COMPONENT(world, BallMovement);
+  ECS_COMPONENT(world, PaddleMovement);
   ECS_COMPONENT(world, RenderableRectangle);
   ECS_COMPONENT(world, PlayerInput);
   ECS_COMPONENT(world, Collider);
@@ -67,16 +70,18 @@ int main(void) {
   ECS_TAG(world, Paddle);
   ECS_TAG(world, Wall);
 
-  ECS_SYSTEM(world, Move, EcsOnUpdate, Position, [in] Velocity);
+  ECS_SYSTEM(world, MoveBall, EcsOnUpdate, [out] Position, [inout] BallMovement,
+             Ball);
+  ECS_SYSTEM(world, MovePaddle,
+             EcsOnUpdate, [out] Position, [inout] PaddleMovement, Paddle);
   ECS_SYSTEM(world, RenderRectangle,
              EcsOnUpdate, [in] Position, [in] RenderableRectangle);
   ECS_SYSTEM(world, HandlePlayerInputActions,
-             EcsOnUpdate, [out] Velocity, [in] PlayerInput);
+             EcsOnUpdate, [out] PaddleMovement, [in] PlayerInput);
   ECS_SYSTEM(world, BallPaddleCollisions, EcsOnUpdate,
-             Position, [inout] Velocity, [in] Collider, Ball);
-
+             Position, [inout] BallMovement, [in] Collider, Ball);
   ECS_SYSTEM(world, BallWallCollisions, EcsOnUpdate,
-             Position, [inout] Velocity, [in] Collider, Ball);
+             Position, [inout] BallMovement, [in] Collider, Ball);
 
   Input left_paddle_input;
   InitInput(&left_paddle_input);
@@ -93,7 +98,12 @@ int main(void) {
                  ecs_value(Position, {properties.PADDLE_SCREEN_SIZE_MARGIN,
                                       (float)properties.SCREEN_HEIGHT / 2 -
                                           properties.PADDLE_HEIGHT / 2}),
-                 ecs_value(Velocity, {0, 0}),
+                 ecs_value(PaddleMovement,
+                           {
+                               .speed = properties.PADDLE_SPEED,
+                               .direction = {0, 0},
+                               .velocity = {0, 0},
+                           }),
                  ecs_value(RenderableRectangle,
                            {
                                .width = properties.PADDLE_WIDTH,
@@ -120,7 +130,12 @@ int main(void) {
                                           properties.PADDLE_WIDTH,
                                       (float)properties.SCREEN_HEIGHT / 2 -
                                           properties.PADDLE_HEIGHT / 2}),
-                 ecs_value(Velocity, {0, 0}),
+                 ecs_value(PaddleMovement,
+                           {
+                               .speed = properties.PADDLE_SPEED,
+                               .direction = {0, 0},
+                               .velocity = {0, 0},
+                           }),
                  ecs_value(RenderableRectangle,
                            {
                                .width = properties.PADDLE_WIDTH,
@@ -144,8 +159,13 @@ int main(void) {
       world,
       ecs_value(Position, {.x = (float)properties.SCREEN_WIDTH / 2,
                            .y = (float)properties.SCREEN_HEIGHT / 2}),
-      ecs_value(Velocity, {.x = properties.BALL_INITIAL_VELOCITY_X,
-                           .y = properties.BALL_INITIAL_VELOCITY_Y}),
+      ecs_value(BallMovement,
+                {
+                    .min_speed = properties.BALL_MIN_SPEED,
+                    .max_speed = properties.BALL_MAX_SPEED,
+                    .direction = properties.BALL_INITIAL_DIRECTION,
+                    .velocity = {0, 0},
+                }),
       ecs_value(RenderableRectangle,
                 {properties.BALL_SIDE, properties.BALL_SIDE, WHITE}),
       ecs_value(Collider, {properties.BALL_SIDE, properties.BALL_SIDE}));
@@ -176,10 +196,22 @@ int main(void) {
     ecs_run(world, ecs_id(BallWallCollisions), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(HandlePlayerInputActions), GetFrameTime(),
             (void *)&properties);
-    ecs_run(world, ecs_id(Move), GetFrameTime(), (void *)&properties);
+    ecs_run(world, ecs_id(MoveBall), GetFrameTime(), NULL);
+    ecs_run(world, ecs_id(MovePaddle), GetFrameTime(), NULL);
 
     BeginDrawing();
     ClearBackground(BLACK);
+
+#ifdef DEBUGGING
+    const Position *ball_pos = ecs_get(world, ball, Position);
+
+    DrawText(
+        TextFormat("Ball Position: x: %.1f, y: %.1f", ball_pos->x, ball_pos->y),
+        10.f, 15.f, 20.f, WHITE);
+
+    DrawFPS(10.f, properties.SCREEN_HEIGHT - 30.f);
+#endif
+
     ecs_run(world, ecs_id(RenderRectangle), GetFrameTime(), NULL);
     EndDrawing();
   }
