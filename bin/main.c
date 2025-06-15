@@ -1,64 +1,20 @@
 #include "flecs.h"
 #include "input.h"
+#include "movement.h"
+#include "properties.h"
 #include "raylib.h"
+#include "render.h"
 #include <stddef.h>
 #include <stdio.h>
 
 #define UP_DIRECTION -1.f
 #define DOWN_DIRECTION 1.f
 
-typedef struct Properties {
-  int SCREEN_WIDTH;
-  int SCREEN_HEIGHT;
-  int FPS_LOCK;
-  float PADDLE_SPEED;
-  float PADDLE_WIDTH;
-  float PADDLE_HEIGHT;
-  float PADDLE_SCREEN_SIZE_MARGIN;
-} Properties;
-
-typedef struct Position {
-  float x;
-  float y;
-} Position, Velocity;
-
-typedef struct RenderableRectangle {
-  float width;
-  float height;
-  Color color;
-} RenderableRectangle;
-
 typedef struct PlayerInput {
   InputAction up_action;
   InputAction down_action;
   Input *input;
 } PlayerInput;
-
-void Move(ecs_iter_t *it) {
-  Position *positions = ecs_field(it, Position, 0);
-  Velocity *velocities = ecs_field(it, Velocity, 1);
-
-  const Properties *properties = (Properties *)it->param;
-
-  for (size_t i = 0; i < it->count; i++) {
-    positions[i].x +=
-        velocities[i].x * it->delta_time * properties->PADDLE_SPEED;
-    positions[i].y +=
-        velocities[i].y * it->delta_time * properties->PADDLE_SPEED;
-  }
-}
-
-void RenderRectangle(ecs_iter_t *it) {
-  Position *positions = ecs_field(it, Position, 0);
-  RenderableRectangle *rectangles = ecs_field(it, RenderableRectangle, 1);
-
-  for (size_t i = 0; i < it->count; i++) {
-    Position *p = &positions[i];
-    RenderableRectangle *r = &rectangles[i];
-
-    DrawRectangle(p->x, p->y, r->width, r->height, r->color);
-  }
-}
 
 void HandlePlayerInputActions(ecs_iter_t *it) {
   Velocity *velocities = ecs_field(it, Velocity, 0);
@@ -111,6 +67,7 @@ int main(void) {
 
   Input right_paddle_input;
   InitInput(&right_paddle_input);
+
   right_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_J;
   right_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_K;
 
