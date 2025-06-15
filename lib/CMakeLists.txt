@@ -20,3 +20,6 @@ add_library(utils STATIC utils.c utils.h)
 
 add_library(score STATIC score.c score.h)
 target_link_libraries(score PUBLIC flecs movement)
+
+add_library(server STATIC server.c server.h)
+# target_link_libraries(server PUBLIC )
