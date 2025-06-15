@@ -57,6 +57,9 @@ int main(void) {
   ECS_COMPONENT(world, PlayerInput);
   ECS_COMPONENT(world, Collider);
 
+  ECS_TAG(world, Ball);
+  ECS_TAG(world, Paddle);
+
   ECS_SYSTEM(world, Move, EcsOnUpdate, Position, [in] Velocity);
   ECS_SYSTEM(world, RenderRectangle,
              EcsOnUpdate, [in] Position, [in] RenderableRectangle);
@@ -102,6 +105,8 @@ int main(void) {
 
       );
 
+  ecs_add_id(world, left_paddle, Paddle);
+
   ecs_entity_t right_paddle =
       ecs_insert(world,
                  ecs_value(Position, {properties.PADDLE_SCREEN_SIZE_MARGIN,
@@ -128,6 +133,8 @@ int main(void) {
 
       );
 
+  ecs_add_id(world, right_paddle, Paddle);
+
   ecs_entity_t ball = ecs_insert(
       world,
       ecs_value(Position, {.x = (float)properties.SCREEN_WIDTH / 2,
@@ -136,6 +143,8 @@ int main(void) {
       ecs_value(RenderableRectangle,
                 {properties.BALL_SIDE, properties.BALL_SIDE, WHITE}),
       ecs_value(Collider, {properties.BALL_SIDE, properties.BALL_SIDE}));
+
+  ecs_add_id(world, ball, Ball);
 
   while (!WindowShouldClose()) {
     UpdateInput(&left_paddle_input);
