@@ -24,7 +24,13 @@ typedef struct PaddleMovement {
   vec2 velocity;
 } PaddleMovement;
 
+typedef struct MovementClamp {
+  float lower_limit;
+  float upper_limit;
+} MovementClamp;
+
 void MoveBall(ecs_iter_t *it);
 void MovePaddle(ecs_iter_t *it);
+void ClampPosition(ecs_iter_t *it);
 
 #endif // !MOVEMENT_H

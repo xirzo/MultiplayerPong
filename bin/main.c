@@ -62,6 +62,7 @@ int main(void) {
   ECS_COMPONENT(world, Position);
   ECS_COMPONENT(world, BallMovement);
   ECS_COMPONENT(world, PaddleMovement);
+  ECS_COMPONENT(world, MovementClamp);
   ECS_COMPONENT(world, RenderableRectangle);
   ECS_COMPONENT(world, PlayerInput);
   ECS_COMPONENT(world, Collider);
@@ -74,6 +75,7 @@ int main(void) {
              Ball);
   ECS_SYSTEM(world, MovePaddle,
              EcsOnUpdate, [out] Position, [inout] PaddleMovement, Paddle);
+  ECS_SYSTEM(world, ClampPosition, EcsOnUpdate, [out] Position, MovementClamp);
   ECS_SYSTEM(world, RenderRectangle,
              EcsOnUpdate, [in] Position, [in] RenderableRectangle);
   ECS_SYSTEM(world, HandlePlayerInputActions,
@@ -93,65 +95,77 @@ int main(void) {
   right_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_UP;
   right_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_DOWN;
 
-  ecs_entity_t left_paddle =
-      ecs_insert(world,
-                 ecs_value(Position, {properties.PADDLE_SCREEN_SIZE_MARGIN,
-                                      (float)properties.SCREEN_HEIGHT / 2 -
-                                          properties.PADDLE_HEIGHT / 2}),
-                 ecs_value(PaddleMovement,
-                           {
-                               .speed = properties.PADDLE_SPEED,
-                               .direction = {0, 0},
-                               .velocity = {0, 0},
-                           }),
-                 ecs_value(RenderableRectangle,
-                           {
-                               .width = properties.PADDLE_WIDTH,
-                               .height = properties.PADDLE_HEIGHT,
-                               .color = RED,
-                           }),
-                 ecs_value(PlayerInput,
-                           {
-                               .up_action = ACTION_MOVE_UP,
-                               .down_action = ACTION_MOVE_DOWN,
-                               .input = &left_paddle_input,
-                           }),
-                 ecs_value(Collider, {
-                                         .width = properties.PADDLE_WIDTH,
-                                         .height = properties.PADDLE_HEIGHT,
-                                     }));
+  ecs_entity_t left_paddle = ecs_insert(
+      world,
+      ecs_value(Position, {properties.PADDLE_SCREEN_SIZE_MARGIN,
+                           (float)properties.SCREEN_HEIGHT / 2 -
+                               properties.PADDLE_HEIGHT / 2}),
+      ecs_value(PaddleMovement,
+                {
+                    .speed = properties.PADDLE_SPEED,
+                    .direction = {0, 0},
+                    .velocity = {0, 0},
+                }),
+      ecs_value(RenderableRectangle,
+                {
+                    .width = properties.PADDLE_WIDTH,
+                    .height = properties.PADDLE_HEIGHT,
+                    .color = RED,
+                }),
+      ecs_value(PlayerInput,
+                {
+                    .up_action = ACTION_MOVE_UP,
+                    .down_action = ACTION_MOVE_DOWN,
+                    .input = &left_paddle_input,
+                }),
+      ecs_value(Collider,
+                {
+                    .width = properties.PADDLE_WIDTH,
+                    .height = properties.PADDLE_HEIGHT,
+                }),
+      ecs_value(MovementClamp, {
+                                   .lower_limit = 0,
+                                   .upper_limit = properties.SCREEN_HEIGHT -
+                                                  properties.PADDLE_HEIGHT,
+                               }));
 
   ecs_add_id(world, left_paddle, Paddle);
 
-  ecs_entity_t right_paddle =
-      ecs_insert(world,
-                 ecs_value(Position, {properties.SCREEN_WIDTH -
-                                          properties.PADDLE_SCREEN_SIZE_MARGIN -
-                                          properties.PADDLE_WIDTH,
-                                      (float)properties.SCREEN_HEIGHT / 2 -
-                                          properties.PADDLE_HEIGHT / 2}),
-                 ecs_value(PaddleMovement,
-                           {
-                               .speed = properties.PADDLE_SPEED,
-                               .direction = {0, 0},
-                               .velocity = {0, 0},
-                           }),
-                 ecs_value(RenderableRectangle,
-                           {
-                               .width = properties.PADDLE_WIDTH,
-                               .height = properties.PADDLE_HEIGHT,
-                               .color = GREEN,
-                           }),
-                 ecs_value(PlayerInput,
-                           {
-                               .up_action = ACTION_MOVE_UP,
-                               .down_action = ACTION_MOVE_DOWN,
-                               .input = &right_paddle_input,
-                           }),
-                 ecs_value(Collider, {
-                                         .width = properties.PADDLE_WIDTH,
-                                         .height = properties.PADDLE_HEIGHT,
-                                     }));
+  ecs_entity_t right_paddle = ecs_insert(
+      world,
+      ecs_value(
+          Position,
+          {properties.SCREEN_WIDTH - properties.PADDLE_SCREEN_SIZE_MARGIN -
+               properties.PADDLE_WIDTH,
+           (float)properties.SCREEN_HEIGHT / 2 - properties.PADDLE_HEIGHT / 2}),
+      ecs_value(PaddleMovement,
+                {
+                    .speed = properties.PADDLE_SPEED,
+                    .direction = {0, 0},
+                    .velocity = {0, 0},
+                }),
+      ecs_value(RenderableRectangle,
+                {
+                    .width = properties.PADDLE_WIDTH,
+                    .height = properties.PADDLE_HEIGHT,
+                    .color = GREEN,
+                }),
+      ecs_value(PlayerInput,
+                {
+                    .up_action = ACTION_MOVE_UP,
+                    .down_action = ACTION_MOVE_DOWN,
+                    .input = &right_paddle_input,
+                }),
+      ecs_value(Collider,
+                {
+                    .width = properties.PADDLE_WIDTH,
+                    .height = properties.PADDLE_HEIGHT,
+                }),
+      ecs_value(MovementClamp, {
+                                   .lower_limit = 0,
+                                   .upper_limit = properties.SCREEN_HEIGHT -
+                                                  properties.PADDLE_HEIGHT,
+                               }));
 
   ecs_add_id(world, right_paddle, Paddle);
 
@@ -181,7 +195,7 @@ int main(void) {
       world,
       ecs_value(
           Position,
-          {.x = 0, .y = properties.SCREEN_HEIGHT - properties.WALL_THICKNESS}),
+          {.x = 0, .y = properties.SCREEN_HEIGHT - properties.PADDLE_HEIGHT}),
       ecs_value(Collider,
                 {properties.SCREEN_WIDTH, properties.WALL_THICKNESS}));
 
@@ -192,6 +206,7 @@ int main(void) {
     UpdateInput(&left_paddle_input);
     UpdateInput(&right_paddle_input);
 
+    ecs_run(world, ecs_id(ClampPosition), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(BallPaddleCollisions), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(BallWallCollisions), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(HandlePlayerInputActions), GetFrameTime(),
@@ -221,5 +236,4 @@ int main(void) {
   return 0;
 }
 
-// TODO: clamp player movement
 // TODO: add score
