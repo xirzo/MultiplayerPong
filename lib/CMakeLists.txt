@@ -17,3 +17,6 @@ add_library(render STATIC render.c render.h)
 target_link_libraries(render PUBLIC raylib flecs)
 
 add_library(utils STATIC utils.c utils.h)
+
+add_library(score STATIC score.c score.h)
+target_link_libraries(score PUBLIC flecs movement)
