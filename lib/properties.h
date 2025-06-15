@@ -9,6 +9,7 @@ typedef struct Properties {
   float PADDLE_WIDTH;
   float PADDLE_HEIGHT;
   float PADDLE_SCREEN_SIZE_MARGIN;
+  float BALL_SIDE;
 } Properties;
 
 #endif // !PROPERTIES_H

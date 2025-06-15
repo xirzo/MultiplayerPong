@@ -1,5 +1,8 @@
 add_library(flecs STATIC flecs.c flecs.h)
 
+add_library(aabb STATIC aabb.c aabb.h)
+target_link_libraries(aabb PUBLIC flecs)
+
 add_library(input STATIC input.c input.h)
 target_link_libraries(input PUBLIC raylib)
 
