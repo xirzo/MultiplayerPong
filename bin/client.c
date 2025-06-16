@@ -1,18 +1,71 @@
 #include "server.h"
+#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+static void handle_server_message(const ServerMessage *msg);
 
 int main() {
-  Client *client = sr_client_create("127.0.0.1", 8080);
+  Client *client = malloc(sizeof(Client));
 
-  if (!client) {
-    fprintf(stderr, "error: Failed to create client\n");
-    return 1;
+  if (sr_client_connect(client, "127.0.0.1", 8080) != 0) {
+    printf("Failed to connect to server\n");
+    free(client);
+    return -1;
   }
 
-  vec2 pos = {10.5f, 20.3f};
+  for (float i = 0; i < 3.f; i++) {
+    vec2 pos = {10.5f + i, 20.3f + i};
 
-  sr_send_client_position(client, pos);
+    sr_send_position_to_server(client, pos);
 
-  sr_client_destroy(client);
+    printf("Sent position (%.2f, %.2f)\n", pos.x, pos.y);
+
+    ServerMessage response;
+
+    if (sr_receive_server_message(client, &response) == 0) {
+      handle_server_message(&response);
+    }
+
+    usleep(100000);
+  }
+
+  printf("Listening for more server messages...\n");
+
+  for (int i = 0; i < 10; i++) {
+    ServerMessage response;
+
+    if (sr_receive_server_message(client, &response) == 0) {
+      handle_server_message(&response);
+    }
+
+    usleep(500000);
+  }
+
+  sr_client_close(client);
+  free(client);
   return 0;
+}
+
+void handle_server_message(const ServerMessage *msg) {
+  switch (msg->type) {
+  case SERVER_MSG_POSITION_UPDATE:
+    printf("Player %d moved to (%.2f, %.2f)\n", msg->client_id,
+           msg->data.position.x, msg->data.position.y);
+    break;
+
+  case SERVER_MSG_PLAYER_JOINED:
+    printf("Player %d joined: %s\n", msg->data.player_info.player_id,
+           msg->data.player_info.player_name);
+    break;
+
+  case SERVER_MSG_PLAYER_LEFT:
+    printf("Player %d left the game\n", msg->client_id);
+    break;
+
+  default:
+    printf("Unknown message type: %d\n", msg->type);
+    break;
+  }
 }

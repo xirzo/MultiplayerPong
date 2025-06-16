@@ -1,44 +1,64 @@
 #include "server.h"
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <pthread.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #define BUFSIZE 1024
 
+/*
+    Server
+*/
+
 Server *sr_create_server(unsigned short port) {
   Server *server = malloc(sizeof(Server));
-  struct sockaddr_in servaddr;
-  bzero(&servaddr, sizeof(servaddr));
 
   if (!server) {
     perror("failed to allocate memory for server");
     return NULL;
   }
 
-  if ((server->fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+  server->addrlen = sizeof(server->servaddr);
+  bzero(&server->servaddr, sizeof(server->servaddr));
+
+  if ((server->fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     perror("socket creation failed");
+    free(server);
     return NULL;
   }
+
+  server->servaddr.sin_family = AF_INET;
+  server->servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  server->servaddr.sin_port = htons(port);
 
   int optval = 1;
   setsockopt(server->fd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval,
              sizeof(int));
 
-  servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  servaddr.sin_port = htons(port);
-  servaddr.sin_family = AF_INET;
-
-  if (bind(server->fd, (const struct sockaddr *)&servaddr, sizeof(servaddr)) <
-      0) {
+  if (bind(server->fd, (const struct sockaddr *)&server->servaddr,
+           sizeof(server->servaddr)) < 0) {
     perror("bind failed");
+    close(server->fd);
+    free(server);
     return NULL;
+  }
+
+  server->client_count = 0;
+  server->next_client_id = 0;
+  pthread_mutex_init(&server->clients_mutex, NULL);
+
+  for (size_t i = 0; i < server->client_count; i++) {
+    server->clients[i].active = 0;
   }
 
   return server;
@@ -49,125 +69,279 @@ void sr_destroy_server(Server *server) {
     return;
   }
 
+  pthread_mutex_lock(&server->clients_mutex);
+  for (size_t i = 0; i < server->client_count; i++) {
+    if (server->clients[i].active) {
+      server->clients[i].active = 0;
+      close(server->clients[i].socket_fd);
+      pthread_join(server->clients[i].thread_id, NULL);
+    }
+  }
+  pthread_mutex_unlock(&server->clients_mutex);
+  pthread_mutex_destroy(&server->clients_mutex);
+  close(server->fd);
   free(server);
 }
 
 void sr_start_listen(Server *server) {
-  struct sockaddr_in clientaddr;
-  socklen_t clientlen = sizeof(clientaddr);
-  char buf[BUFSIZE];
+  if ((listen(server->fd, MAX_PLAYERS)) < 0) {
+    perror("failed listening");
+    return;
+  }
+
+  printf("Server started listening on port: %d\n",
+         htons(server->servaddr.sin_port));
 
   while (1) {
-    bzero(buf, BUFSIZE);
-    ssize_t bytes_read = recvfrom(server->fd, buf, BUFSIZE, 0,
-                                  (struct sockaddr *)&clientaddr, &clientlen);
-    if (bytes_read < 0) {
-      perror("ERROR in recvfrom");
-      return;
+    int client_fd;
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+
+    char buf[BUFSIZE];
+
+    if ((client_fd = accept(server->fd, (struct sockaddr *)&server->servaddr,
+                            (socklen_t *)&server->addrlen)) < 0) {
+      perror("failed to accept connection");
+      continue;
     }
 
-    struct hostent *hostp =
-        gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr,
-                      sizeof(clientaddr.sin_addr.s_addr), AF_INET);
+    int client_id = sr_add_client(server, client_fd, client_addr);
 
-    if (hostp == NULL) {
-      perror("ERROR on gethostbyaddr");
-      return;
+    if (client_id < 0) {
+      perror("failed to add client");
+      close(client_fd);
+      continue;
     }
 
-    char *hostaddrp = inet_ntoa(clientaddr.sin_addr);
-
-    if (hostaddrp == NULL) {
-      perror("ERROR on inet_ntoa\n");
-      return;
-    }
-
-    printf("server received datagram from %s (%s)\n", hostp->h_name, hostaddrp);
-
-    if (bytes_read == sizeof(vec2)) {
-      vec2 *position = (vec2 *)buf;
-      printf("server received position: x=%.2f, y=%.2f\n", position->x,
-             position->y);
-    } else {
-      printf("server received %lu/%zd bytes: %s\n", strlen(buf), bytes_read,
-             buf);
-    }
-
-    bytes_read = sendto(server->fd, buf, bytes_read, 0,
-                        (struct sockaddr *)&clientaddr, clientlen);
-
-    if (bytes_read < 0) {
-      perror("ERROR in sendto");
-      return;
-    }
+    printf("Succesfully added client\n");
   }
-
-  close(server->fd);
 }
 
-Client *sr_client_create(const char *ip, unsigned short port) {
-  if (!ip) {
-    return NULL;
+void *handle_client(void *arg) {
+  ThreadArgs *args = (ThreadArgs *)arg;
+  Server *server = args->server;
+  ClientConnection *con = &server->clients[args->client_index];
+
+  printf("Client %d connected from %s\n", con->client_id,
+         inet_ntoa(con->addr.sin_addr));
+
+  ServerMessage welcome_msg = {
+      .type = SERVER_MSG_PLAYER_JOINED,
+      .client_id = con->client_id,
+      .timestamp = time(NULL),
+  };
+
+  strncpy(welcome_msg.data.player_info.player_name, "Player", 31);
+  welcome_msg.data.player_info.player_id = con->client_id;
+
+  sr_send_message_to_all_except(server, con->client_id, &welcome_msg);
+
+  while (con->active) {
+    ServerMessage msg;
+    ssize_t bytes_read = read(con->socket_fd, &msg, sizeof(ServerMessage));
+
+    if (bytes_read <= 0) {
+      printf("Client %d disconnected\n", con->client_id);
+      break;
+    }
+
+    if (bytes_read == sizeof(ServerMessage)) {
+      switch (msg.type) {
+      case SERVER_MSG_POSITION_UPDATE: {
+
+        printf("Client %d position: (%.2f, %.2f)\n", con->client_id,
+               msg.data.position.x, msg.data.position.y);
+
+        con->position = msg.data.position;
+
+        ServerMessage pos_broadcast = {.type = SERVER_MSG_POSITION_UPDATE,
+                                       .client_id = con->client_id,
+                                       .timestamp = time(NULL),
+                                       .data.position = msg.data.position};
+        sr_send_message_to_all_except(server, con->client_id, &pos_broadcast);
+        break;
+      }
+      default: {
+
+        printf("Unknown message type %d from client %d\n", msg.type,
+               con->client_id);
+        break;
+      }
+      }
+    }
   }
 
-  Client *client = malloc(sizeof(Client));
+  ServerMessage goodbye_msg = {.type = SERVER_MSG_PLAYER_LEFT,
+                               .client_id = con->client_id,
+                               .timestamp = time(NULL)};
+  sr_send_message_to_all_except(server, con->client_id, &goodbye_msg);
 
-  if (!client) {
-    perror("failed to allocate memory for client");
-    return NULL;
-  }
+  close(con->socket_fd);
+  con->active = 0;
 
-  client->fd = socket(AF_INET, SOCK_DGRAM, 0);
+  pthread_mutex_lock(&server->clients_mutex);
+  server->client_count--;
+  pthread_mutex_unlock(&server->clients_mutex);
 
-  if (client->fd < 0) {
-    perror("socket creation failed for client");
-    free(client);
-    return NULL;
-  }
-
-  client->addr_len = sizeof(struct sockaddr_in);
-
-  bzero(&client->addr, sizeof(client->addr));
-  client->addr.sin_family = AF_INET;
-  client->addr.sin_port = htons(port);
-
-  if (inet_pton(AF_INET, ip, &client->addr.sin_addr) <= 0) {
-    perror("invalid IP address");
-    close(client->fd);
-    free(client);
-    return NULL;
-  }
-
-  printf("Created client for %s:%d with fd %d\n", ip, port, client->fd);
-
-  return client;
+  free(arg);
+  return NULL;
 }
 
-void sr_client_destroy(Client *client) {
+int sr_add_client(Server *server, int socket_fd, struct sockaddr_in addr) {
+  if (server->client_count >= MAX_PLAYERS) {
+    return 1;
+  }
+
+  pthread_mutex_lock(&server->clients_mutex);
+
+  for (int i = 0; i < MAX_PLAYERS; i++) {
+    ClientConnection *con = &server->clients[i];
+
+    if (con->active) {
+      continue;
+    }
+
+    con->socket_fd = socket_fd;
+    con->addr = addr;
+    con->active = 1;
+    con->client_id = server->next_client_id++;
+
+    ThreadArgs *args = malloc(sizeof(ThreadArgs));
+    args->client_index = i;
+    args->server = server;
+
+    if (pthread_create(&server->clients[i].thread_id, NULL, handle_client,
+                       (void *)args) < 0) {
+      server->clients[i].active = 0;
+      pthread_mutex_unlock(&server->clients_mutex);
+      return -1;
+    }
+
+    pthread_mutex_unlock(&server->clients_mutex);
+    return con->client_id;
+  }
+
+  pthread_mutex_unlock(&server->clients_mutex);
+  return -1;
+}
+
+void sr_send_message_to_all(Server *server, const ServerMessage *message) {
+  pthread_mutex_lock(&server->clients_mutex);
+
+  for (int i = 0; i < MAX_PLAYERS; i++) {
+    if (server->clients[i].active) {
+      send(server->clients[i].socket_fd, message, sizeof(ServerMessage), 0);
+    }
+  }
+
+  pthread_mutex_unlock(&server->clients_mutex);
+}
+
+void sr_send_message_to_all_except(Server *server, int except_client_id,
+                                   const ServerMessage *message) {
+  pthread_mutex_lock(&server->clients_mutex);
+
+  for (int i = 0; i < MAX_PLAYERS; i++) {
+    if (server->clients[i].active &&
+        server->clients[i].client_id != except_client_id) {
+      send(server->clients[i].socket_fd, message, sizeof(ServerMessage), 0);
+    }
+  }
+
+  pthread_mutex_unlock(&server->clients_mutex);
+}
+
+void sr_send_message_to_client(Server *server, int client_id,
+                               const ServerMessage *message) {
+  pthread_mutex_lock(&server->clients_mutex);
+
+  for (int i = 0; i < MAX_PLAYERS; i++) {
+    if (server->clients[i].active &&
+        server->clients[i].client_id == client_id) {
+      send(server->clients[i].socket_fd, message, sizeof(ServerMessage), 0);
+      break;
+    }
+  }
+
+  pthread_mutex_unlock(&server->clients_mutex);
+}
+
+/*
+    Client
+*/
+
+int sr_client_connect(Client *client, const char *server_ip,
+                      unsigned short port) {
+  if (!server_ip) {
+    printf("ip is NULL\n");
+    return -1;
+  }
+
+  client->addr_len = sizeof(client->server_addr);
+
+  client->server_addr.sin_family = AF_INET;
+  client->server_addr.sin_port = htons(port);
+  client->server_addr.sin_addr.s_addr = inet_addr(server_ip);
+
+  if (inet_pton(AF_INET, server_ip, &client->server_addr.sin_addr) <= 0) {
+    printf("invalid address or address not supported\n");
+    return -1;
+  }
+
+  if ((client->server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    printf("socket creation failed...\n");
+    return -1;
+  }
+
+  if (connect(client->server_fd, (struct sockaddr *)&client->server_addr,
+              sizeof(client->server_addr)) < 0) {
+    printf("connection with the server failed...\n");
+    return -1;
+  }
+
+  printf("connected to the server..\n");
+  return 0;
+}
+
+void sr_send_position_to_server(Client *client, vec2 position) {
   if (!client) {
     return;
   }
 
-  printf("Destroying client %s:%d\n", inet_ntoa(client->addr.sin_addr),
-         ntohs(client->addr.sin_port));
+  ClientMessage msg = {
+      .type = CLIENT_MSG_POSITION,
+      .data.position = position,
+  };
 
-  close(client->fd);
-  free(client);
+  ssize_t bytes_sent = send(client->server_fd, &msg, sizeof(ClientMessage), 0);
+
+  if (bytes_sent != sizeof(ClientMessage)) {
+    perror("ERROR in sr_send_client_position");
+    return;
+  }
+
+  printf("Sent position (%.2f, %.2f) to server\n", position.x, position.y);
 }
 
-void sr_send_client_position(Client *client, vec2 position) {
-  if (!client) {
-    return;
+void sr_client_close(Client *client) { close(client->server_fd); }
+
+int sr_receive_server_message(Client *client, ServerMessage *msg) {
+  if (!client || !msg) {
+    return -1;
   }
 
-  ssize_t bytes_sent =
-      sendto(client->fd, &position, sizeof(vec2), 0,
-             (struct sockaddr *)&client->addr, client->addr_len);
+  ssize_t bytes_read = recv(client->server_fd, msg, sizeof(ServerMessage), 0);
 
-  if (bytes_sent < 0) {
-    perror("ERROR in rv_send_client_position");
-    return;
+  if (bytes_read == sizeof(ServerMessage)) {
+    return 0;
+  } else if (bytes_read == 0) {
+    return -1;
+  } else if (bytes_read < 0) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return -3;
+    }
+    return -2;
+  } else {
+    return -2;
   }
-
-  printf("Sent position (%.2f, %.2f) to client\n", position.x, position.y);
 }
