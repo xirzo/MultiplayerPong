@@ -52,7 +52,6 @@ void MoveEnemy(ecs_iter_t *it) {
   Position *positions = ecs_field(it, Position, 0);
 
   MoveEnemyContext *ctx = (MoveEnemyContext *)it->param;
-
   Client *client = ctx->client;
   const Properties *properties = ctx->properties;
 
@@ -60,18 +59,36 @@ void MoveEnemy(ecs_iter_t *it) {
     Position *pos = &positions[i];
 
     ServerMessage response;
-
     if (sr_receive_server_message(client, &response) == 0) {
       switch (response.type) {
       case SERVER_MSG_PADDLE_POSITION_UPDATE: {
-        pos->x =
-            properties->SCREEN_WIDTH - properties->PADDLE_SCREEN_SIZE_MARGIN;
-        pos->y = response.data.position.y;
+        printf("Received paddle update from client %d: (%.2f, %.2f)\n",
+               response.client_id, response.data.position.x,
+               response.data.position.y);
+
+        if (is_main) {
+          pos->x = properties->SCREEN_WIDTH -
+                   properties->PADDLE_SCREEN_SIZE_MARGIN -
+                   properties->PADDLE_WIDTH;
+          pos->y = response.data.position.y;
+          printf("Main client: Set enemy paddle to right side (%.2f, %.2f)\n",
+                 pos->x, pos->y);
+        } else {
+          float mirrored_x = properties->SCREEN_WIDTH -
+                             response.data.position.x -
+                             properties->PADDLE_WIDTH;
+
+          pos->x = mirrored_x;
+          pos->y = response.data.position.y;
+          printf("Non-main client: Mirrored enemy paddle from (%.2f, %.2f) to "
+                 "(%.2f, %.2f)\n",
+                 response.data.position.x, response.data.position.y, pos->x,
+                 pos->y);
+        }
         break;
       }
-      default: {
+      default:
         break;
-      }
       }
     }
   }
@@ -88,6 +105,7 @@ void UpdateBallFromNetwork(ecs_iter_t *it) {
 
   NetworkContext *ctx = (NetworkContext *)it->param;
   Client *client = ctx->client;
+  const Properties *properties = ctx->properties;
 
   for (size_t i = 0; i < it->count; i++) {
     Position *pos = &positions[i];
@@ -95,12 +113,19 @@ void UpdateBallFromNetwork(ecs_iter_t *it) {
     ServerMessage response;
     while (sr_receive_server_message(client, &response) == 0) {
       switch (response.type) {
-      case SERVER_MSG_BALL_POSITION_UPDATE:
-        printf("Non-main client: Updated ball position to (%.2f, %.2f)\n",
-               response.data.position.x, response.data.position.y);
-        pos->x = response.data.position.x;
-        pos->y = response.data.position.y;
+      case SERVER_MSG_BALL_POSITION_UPDATE: {
+        float mirrored_x = properties->SCREEN_WIDTH - response.data.position.x;
+        float mirrored_y = response.data.position.y;
+
+        printf("Non-main client: Ball position (%.2f, %.2f) -> mirrored (%.2f, "
+               "%.2f)\n",
+               response.data.position.x, response.data.position.y, mirrored_x,
+               mirrored_y);
+
+        pos->x = mirrored_x;
+        pos->y = mirrored_y;
         break;
+      }
       default:
         break;
       }
@@ -161,6 +186,7 @@ int main(void) {
 
   ECS_TAG(world, Ball);
   // TODO: rename Paddle to Player
+  // TODO: solve problem of having 3 tags
   ECS_TAG(world, Paddle);
   ECS_TAG(world, Enemy);
   ECS_TAG(world, Wall);
@@ -226,7 +252,7 @@ int main(void) {
 
   ecs_add_id(world, player, Paddle);
 
-  ecs_entity_t right_paddle =
+  ecs_entity_t enemy =
       ecs_insert(world,
                  ecs_value(Position, {properties.SCREEN_WIDTH -
                                           properties.PADDLE_SCREEN_SIZE_MARGIN -
@@ -246,7 +272,8 @@ int main(void) {
                            }),
                  ecs_value(Score, {.value = 0}));
 
-  ecs_add_id(world, right_paddle, Enemy);
+  ecs_add_id(world, enemy, Enemy);
+  ecs_add_id(world, enemy, Paddle);
 
   ecs_entity_t ball = ecs_insert(
       world,
@@ -290,15 +317,49 @@ int main(void) {
       case SERVER_MSG_IS_MAIN:
         printf("Current client is main\n");
         is_main = true;
+
+        ecs_set(world, player, Position,
+                {.x = properties.PADDLE_SCREEN_SIZE_MARGIN,
+                 .y = (float)properties.SCREEN_HEIGHT / 2 -
+                      properties.PADDLE_HEIGHT / 2});
+        ecs_set(world, enemy, Position,
+                {.x = properties.SCREEN_WIDTH -
+                      properties.PADDLE_SCREEN_SIZE_MARGIN -
+                      properties.PADDLE_WIDTH,
+                 .y = (float)properties.SCREEN_HEIGHT / 2 -
+                      properties.PADDLE_HEIGHT / 2});
         break;
+
       case SERVER_MSG_BALL_POSITION_UPDATE:
         if (!is_main) {
-          printf("Received ball position update: (%.2f, %.2f)\n",
-                 msg.data.position.x, msg.data.position.y);
-          ecs_set(world, ball, Position,
-                  {.x = msg.data.position.x, .y = msg.data.position.y});
+          float mirrored_x = properties.SCREEN_WIDTH - msg.data.position.x;
+          float mirrored_y = msg.data.position.y;
+          ecs_set(world, ball, Position, {.x = mirrored_x, .y = mirrored_y});
         }
         break;
+
+      case SERVER_MSG_PADDLE_POSITION_UPDATE: {
+        printf("Received paddle position update from client %d: (%.2f, %.2f)\n",
+               msg.client_id, msg.data.position.x, msg.data.position.y);
+
+        if (is_main) {
+          ecs_set(world, enemy, Position,
+                  {.x = properties.SCREEN_WIDTH -
+                        properties.PADDLE_SCREEN_SIZE_MARGIN -
+                        properties.PADDLE_WIDTH,
+                   .y = msg.data.position.y});
+          printf("Main client: Updated enemy paddle on right\n");
+        } else {
+          float mirrored_x = properties.SCREEN_WIDTH - msg.data.position.x -
+                             properties.PADDLE_WIDTH;
+          ecs_set(world, enemy, Position,
+                  {.x = mirrored_x, .y = msg.data.position.y});
+          printf("Non-main: Set enemy paddle on right at (%.2f, %.2f)\n",
+                 mirrored_x, msg.data.position.y);
+        }
+        break;
+      }
+
       default:
         break;
       }
@@ -328,8 +389,12 @@ int main(void) {
 
       sr_send_message_to_server(client, &ball_msg);
     } else {
-      ecs_run(world, ecs_id(UpdateBallFromNetwork), GetFrameTime(),
-              (void *)&network_ctx);
+      const Position *current_player_pos = ecs_get(world, player, Position);
+      if (current_player_pos->x > (float)properties.SCREEN_WIDTH / 2) {
+        ecs_set(world, player, Position,
+                {.x = properties.PADDLE_SCREEN_SIZE_MARGIN,
+                 .y = current_player_pos->y});
+      }
     }
 
     // TODO: add system for player_pos sending
@@ -345,7 +410,7 @@ int main(void) {
 #ifdef DEBUGGING
     const Position *ball_pos = ecs_get(world, ball, Position);
     const Score *left_score = ecs_get(world, player, Score);
-    const Score *right_score = ecs_get(world, right_paddle, Score);
+    const Score *right_score = ecs_get(world, enemy, Score);
 
     DrawText(
         TextFormat("Ball Position: x: %.1f, y: %.1f", ball_pos->x, ball_pos->y),
