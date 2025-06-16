@@ -55,7 +55,6 @@ Server *sr_create_server(unsigned short port) {
   }
 
   server->client_count = 0;
-  server->next_client_id = 0;
   pthread_mutex_init(&server->clients_mutex, NULL);
 
   for (size_t i = 0; i < MAX_PLAYERS; i++) {
@@ -206,7 +205,7 @@ int sr_add_client(Server *server, int socket_fd, struct sockaddr_in addr) {
     con->socket_fd = socket_fd;
     con->addr = addr;
     con->active = 1;
-    con->client_id = server->next_client_id++;
+    con->client_id = i;
 
     ThreadArgs *args = malloc(sizeof(ThreadArgs));
     args->client_index = i;
@@ -214,11 +213,13 @@ int sr_add_client(Server *server, int socket_fd, struct sockaddr_in addr) {
 
     if (pthread_create(&server->clients[i].thread_id, NULL, handle_client,
                        (void *)args) < 0) {
-      server->clients[i].active = 0;
+      con->active = 0;
+      free(args);
       pthread_mutex_unlock(&server->clients_mutex);
       return -1;
     }
 
+    server->client_count++;
     pthread_mutex_unlock(&server->clients_mutex);
     return con->client_id;
   }

@@ -56,6 +56,7 @@ typedef struct {
   int socket_fd;
   struct sockaddr_in addr;
   int active;
+  int is_main;
   pthread_t thread_id;
   int client_id;
 
@@ -69,7 +70,6 @@ typedef struct {
 
   ClientConnection clients[MAX_PLAYERS];
   size_t client_count;
-  int next_client_id;
   pthread_mutex_t clients_mutex;
 } Server;
 
