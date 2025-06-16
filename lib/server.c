@@ -1,6 +1,7 @@
 #include "server.h"
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
@@ -139,17 +140,17 @@ void *handle_client(void *arg) {
   sr_send_message_to_all_except(server, con->client_id, &welcome_msg);
 
   while (con->active) {
-    ServerMessage msg;
-    ssize_t bytes_read = read(con->socket_fd, &msg, sizeof(ServerMessage));
+    ClientMessage msg;
+    ssize_t bytes_read = read(con->socket_fd, &msg, sizeof(ClientMessage));
 
     if (bytes_read <= 0) {
       printf("Client %d disconnected\n", con->client_id);
       break;
     }
 
-    if (bytes_read == sizeof(ServerMessage)) {
+    if (bytes_read == sizeof(ClientMessage)) {
       switch (msg.type) {
-      case SERVER_MSG_POSITION_UPDATE: {
+      case CLIENT_MSG_POSITION: {
 
         printf("Client %d position: (%.2f, %.2f)\n", con->client_id,
                msg.data.position.x, msg.data.position.y);
@@ -164,7 +165,6 @@ void *handle_client(void *arg) {
         break;
       }
       default: {
-
         printf("Unknown message type %d from client %d\n", msg.type,
                con->client_id);
         break;
@@ -322,7 +322,7 @@ void sr_send_position_to_server(Client *client, vec2 position) {
     return;
   }
 
-  printf("Sent position (%.2f, %.2f) to server\n", position.x, position.y);
+  // printf("Sent position (%.2f, %.2f) to server\n", position.x, position.y);
 }
 
 void sr_client_close(Client *client) { close(client->server_fd); }
@@ -330,6 +330,14 @@ void sr_client_close(Client *client) { close(client->server_fd); }
 int sr_receive_server_message(Client *client, ServerMessage *msg) {
   if (!client || !msg) {
     return -1;
+  }
+
+  static int made_nonblocking = 0;
+
+  if (!made_nonblocking) {
+    int flags = fcntl(client->server_fd, F_GETFL, 0);
+    fcntl(client->server_fd, F_SETFL, flags | O_NONBLOCK);
+    made_nonblocking = 1;
   }
 
   ssize_t bytes_read = recv(client->server_fd, msg, sizeof(ServerMessage), 0);

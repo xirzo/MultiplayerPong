@@ -8,6 +8,7 @@
 #include "score.h"
 #include "server.h"
 #include <stdio.h>
+#include <wchar.h>
 
 #define DEBUGGING
 
@@ -38,10 +39,45 @@ void HandlePlayerInputActions(ecs_iter_t *it) {
   }
 }
 
+// TODO: remove context resolve this via new system
+typedef struct {
+  Client *client;
+  const Properties *properties;
+} MoveEnemyContext;
+
+void MoveEnemy(ecs_iter_t *it) {
+  Position *positions = ecs_field(it, Position, 0);
+
+  MoveEnemyContext *ctx = (MoveEnemyContext *)it->param;
+
+  Client *client = ctx->client;
+  const Properties *properties = ctx->properties;
+
+  for (size_t i = 0; i < it->count; i++) {
+    Position *pos = &positions[i];
+
+    ServerMessage response;
+
+    if (sr_receive_server_message(client, &response) == 0) {
+      switch (response.type) {
+      case SERVER_MSG_POSITION_UPDATE: {
+        pos->x =
+            properties->SCREEN_WIDTH - properties->PADDLE_SCREEN_SIZE_MARGIN;
+        pos->y = response.data.position.y;
+        break;
+      }
+      default: {
+        break;
+      }
+      }
+    }
+  }
+}
+
 int main(void) {
   const Properties properties = {
-      .SCREEN_WIDTH = 1280,
-      .SCREEN_HEIGHT = 720,
+      .SCREEN_WIDTH = 600,
+      .SCREEN_HEIGHT = 300,
       .FPS_LOCK = 60,
       .PADDLE_SPEED = 450.f,
       .PADDLE_WIDTH = 20.f,
@@ -88,7 +124,9 @@ int main(void) {
   ECS_COMPONENT(world, Score);
 
   ECS_TAG(world, Ball);
+  // TODO: rename Paddle to Player
   ECS_TAG(world, Paddle);
+  ECS_TAG(world, Enemy);
   ECS_TAG(world, Wall);
 
   ECS_SYSTEM(world, BallScoringSystem,
@@ -106,18 +144,14 @@ int main(void) {
              Position, [inout] BallMovement, [in] Collider, Ball);
   ECS_SYSTEM(world, BallWallCollisions, EcsOnUpdate,
              Position, [inout] BallMovement, [in] Collider, Ball);
+  ECS_SYSTEM(world, MoveEnemy, EcsOnUpdate, [out] Position, Enemy);
 
   Input left_paddle_input;
   InitInput(&left_paddle_input);
-  left_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_W;
-  left_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_S;
+  left_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_K;
+  left_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_J;
 
-  Input right_paddle_input;
-  InitInput(&right_paddle_input);
-  right_paddle_input.bindings[ACTION_MOVE_UP].key = KEY_UP;
-  right_paddle_input.bindings[ACTION_MOVE_DOWN].key = KEY_DOWN;
-
-  ecs_entity_t left_paddle =
+  ecs_entity_t player =
       ecs_insert(world,
                  ecs_value(Position, {properties.PADDLE_SCREEN_SIZE_MARGIN,
                                       (float)properties.SCREEN_HEIGHT / 2 -
@@ -153,47 +187,29 @@ int main(void) {
                            }),
                  ecs_value(Score, {.value = 0}));
 
-  ecs_add_id(world, left_paddle, Paddle);
+  ecs_add_id(world, player, Paddle);
 
-  ecs_entity_t right_paddle = ecs_insert(
-      world,
-      ecs_value(
-          Position,
-          {properties.SCREEN_WIDTH - properties.PADDLE_SCREEN_SIZE_MARGIN -
-               properties.PADDLE_WIDTH,
-           (float)properties.SCREEN_HEIGHT / 2 - properties.PADDLE_HEIGHT / 2}),
-      ecs_value(PaddleMovement,
-                {
-                    .speed = properties.PADDLE_SPEED,
-                    .direction = {0, 0},
-                    .velocity = {0, 0},
-                }),
-      ecs_value(RenderableRectangle,
-                {
-                    .width = properties.PADDLE_WIDTH,
-                    .height = properties.PADDLE_HEIGHT,
-                    .color = GREEN,
-                }),
-      ecs_value(PlayerInput,
-                {
-                    .up_action = ACTION_MOVE_UP,
-                    .down_action = ACTION_MOVE_DOWN,
-                    .input = &right_paddle_input,
-                }),
-      ecs_value(Collider,
-                {
-                    .width = properties.PADDLE_WIDTH,
-                    .height = properties.PADDLE_HEIGHT,
-                }),
-      ecs_value(MovementClamp,
-                {
-                    .lower_limit = 0,
-                    .upper_limit =
-                        properties.SCREEN_HEIGHT - properties.PADDLE_HEIGHT,
-                }),
-      ecs_value(Score, {.value = 0}));
+  ecs_entity_t right_paddle =
+      ecs_insert(world,
+                 ecs_value(Position, {properties.SCREEN_WIDTH -
+                                          properties.PADDLE_SCREEN_SIZE_MARGIN -
+                                          properties.PADDLE_WIDTH,
+                                      (float)properties.SCREEN_HEIGHT / 2 -
+                                          properties.PADDLE_HEIGHT / 2}),
+                 ecs_value(RenderableRectangle,
+                           {
+                               .width = properties.PADDLE_WIDTH,
+                               .height = properties.PADDLE_HEIGHT,
+                               .color = GREEN,
+                           }),
+                 ecs_value(Collider,
+                           {
+                               .width = properties.PADDLE_WIDTH,
+                               .height = properties.PADDLE_HEIGHT,
+                           }),
+                 ecs_value(Score, {.value = 0}));
 
-  ecs_add_id(world, right_paddle, Paddle);
+  ecs_add_id(world, right_paddle, Enemy);
 
   ecs_entity_t ball = ecs_insert(
       world,
@@ -228,7 +244,6 @@ int main(void) {
 
   while (!WindowShouldClose()) {
     UpdateInput(&left_paddle_input);
-    UpdateInput(&right_paddle_input);
 
     ecs_run(world, ecs_id(ClampPosition), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(BallScoringSystem), GetFrameTime(),
@@ -237,8 +252,16 @@ int main(void) {
     ecs_run(world, ecs_id(BallWallCollisions), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(HandlePlayerInputActions), GetFrameTime(),
             (void *)&properties);
-    ecs_run(world, ecs_id(MoveBall), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(MovePaddle), GetFrameTime(), NULL);
+    ecs_run(world, ecs_id(MoveBall), GetFrameTime(), NULL);
+
+    MoveEnemyContext ctx = {.client = client, .properties = &properties};
+
+    ecs_run(world, ecs_id(MoveEnemy), GetFrameTime(), (void *)&ctx);
+
+    // TODO: add system for player_pos sending
+    const Position *player_pos = ecs_get(world, player, Position);
+    sr_send_position_to_server(client, (vec2){player_pos->x, player_pos->y});
 
     BeginDrawing();
     ClearBackground(BLACK);
@@ -248,11 +271,8 @@ int main(void) {
 
 #ifdef DEBUGGING
     const Position *ball_pos = ecs_get(world, ball, Position);
-    const Score *left_score = ecs_get(world, left_paddle, Score);
+    const Score *left_score = ecs_get(world, player, Score);
     const Score *right_score = ecs_get(world, right_paddle, Score);
-
-    vec2 pos = {ball_pos->x, ball_pos->y};
-    sr_send_position_to_server(client, pos);
 
     DrawText(
         TextFormat("Ball Position: x: %.1f, y: %.1f", ball_pos->x, ball_pos->y),
