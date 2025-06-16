@@ -109,6 +109,8 @@ int main(void) {
     return 1;
   }
 
+  MoveEnemyContext ctx = {.client = client, .properties = &properties};
+
   InitWindow(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, "game");
   SetTargetFPS(properties.FPS_LOCK);
 
@@ -255,8 +257,6 @@ int main(void) {
     ecs_run(world, ecs_id(MovePaddle), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(MoveBall), GetFrameTime(), NULL);
 
-    MoveEnemyContext ctx = {.client = client, .properties = &properties};
-
     ecs_run(world, ecs_id(MoveEnemy), GetFrameTime(), (void *)&ctx);
 
     // TODO: add system for player_pos sending
@@ -291,8 +291,10 @@ int main(void) {
     EndDrawing();
   }
 
-  CloseWindow();
+  sr_client_close(client);
   free(client);
+
+  CloseWindow();
   ecs_fini(world);
   return 0;
 }

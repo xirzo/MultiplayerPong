@@ -2,6 +2,10 @@
 #include "movement.h"
 #include "properties.h"
 
+#include "movement.h"
+#include "properties.h"
+#include "score.h"
+
 void BallScoringSystem(ecs_iter_t *it) {
   Position *positions = ecs_field(it, Position, 0);
   BallMovement *movements = ecs_field(it, BallMovement, 1);
@@ -13,29 +17,32 @@ void BallScoringSystem(ecs_iter_t *it) {
     BallMovement *ball_movement = &movements[i];
 
     if (ball_pos->x < 0) {
-      ecs_query_t *paddle_query = ecs_query(
-          it->world, {.terms = {{.id = ecs_lookup(it->world, "Score")},
-                                {.id = ecs_lookup(it->world, "Paddle")}}});
+      ecs_query_desc_t desc = {0};
+      desc.terms[0].id = ecs_lookup(it->world, "Score");
+      desc.terms[1].id = ecs_lookup(it->world, "Paddle");
 
-      ecs_iter_t paddle_it = ecs_query_iter(it->world, paddle_query);
+      ecs_query_t *paddle_query = ecs_query_init(it->world, &desc);
 
-      int paddle_count = 0;
+      if (paddle_query) {
+        ecs_iter_t paddle_it = ecs_query_iter(it->world, paddle_query);
+        int paddle_count = 0;
 
-      while (ecs_query_next(&paddle_it)) {
-        Score *scores = ecs_field(&paddle_it, Score, 0);
+        while (ecs_query_next(&paddle_it)) {
+          Score *scores = ecs_field(&paddle_it, Score, 0);
 
-        for (int j = 0; j < paddle_it.count; j++) {
-          if (paddle_count == 1) {
-            scores[j].value++;
-            goto reset_ball_left;
+          for (int j = 0; j < paddle_it.count; j++) {
+            if (paddle_count == 1) {
+              scores[j].value++;
+              break;
+            }
+            paddle_count++;
           }
-
-          paddle_count++;
+          if (paddle_count > 1)
+            break;
         }
-      }
 
-    reset_ball_left:
-      ecs_query_fini(paddle_query);
+        ecs_query_fini(paddle_query);
+      }
 
       ball_pos->x = (float)props->SCREEN_WIDTH / 2;
       ball_pos->y = (float)props->SCREEN_HEIGHT / 2;
@@ -43,27 +50,32 @@ void BallScoringSystem(ecs_iter_t *it) {
       ball_movement->current_speed = props->BALL_MIN_SPEED;
 
     } else if (ball_pos->x > props->SCREEN_WIDTH) {
-      ecs_query_t *paddle_query = ecs_query(
-          it->world, {.terms = {{.id = ecs_lookup(it->world, "Score")},
-                                {.id = ecs_lookup(it->world, "Paddle")}}});
+      ecs_query_desc_t desc = {0};
+      desc.terms[0].id = ecs_lookup(it->world, "Score");
+      desc.terms[1].id = ecs_lookup(it->world, "Paddle");
 
-      ecs_iter_t paddle_it = ecs_query_iter(it->world, paddle_query);
-      int paddle_count = 0;
+      ecs_query_t *paddle_query = ecs_query_init(it->world, &desc);
 
-      while (ecs_query_next(&paddle_it)) {
-        Score *scores = ecs_field(&paddle_it, Score, 0);
+      if (paddle_query) {
+        ecs_iter_t paddle_it = ecs_query_iter(it->world, paddle_query);
+        int paddle_count = 0;
 
-        for (int j = 0; j < paddle_it.count; j++) {
-          if (paddle_count == 0) {
-            scores[j].value++;
-            goto reset_ball_right;
+        while (ecs_query_next(&paddle_it)) {
+          Score *scores = ecs_field(&paddle_it, Score, 0);
+
+          for (int j = 0; j < paddle_it.count; j++) {
+            if (paddle_count == 0) {
+              scores[j].value++;
+              break;
+            }
+            paddle_count++;
           }
-          paddle_count++;
+          if (paddle_count > 0)
+            break;
         }
-      }
 
-    reset_ball_right:
-      ecs_query_fini(paddle_query);
+        ecs_query_fini(paddle_query);
+      }
 
       ball_pos->x = (float)props->SCREEN_WIDTH / 2;
       ball_pos->y = (float)props->SCREEN_HEIGHT / 2;
