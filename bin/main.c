@@ -6,6 +6,8 @@
 #include "raylib.h"
 #include "render.h"
 #include "score.h"
+#include "server.h"
+#include <stdio.h>
 
 #define DEBUGGING
 
@@ -51,7 +53,25 @@ int main(void) {
       .BALL_INITIAL_DIRECTION = {0.7f, -0.7f},
       .WALL_THICKNESS = 10.f,
       .MIDDLE_LINE_WIDTH = 10.f,
+      .SERVER_IP = "127.0.0.1",
+      .SERVER_PORT = 8080,
   };
+
+  Client *client = malloc(sizeof(Client));
+
+  if (!client) {
+    fprintf(stderr, "error: Failed to allocate memory for client\n");
+    return 1;
+  }
+
+  if ((sr_client_connect(client, properties.SERVER_IP,
+                         properties.SERVER_PORT)) != 0) {
+    fprintf(stderr, "error: Failed to connect to the server\n");
+    fprintf(stderr, "Make sure the server is running on %s:%d\n",
+            properties.SERVER_IP, properties.SERVER_PORT);
+    free(client);
+    return 1;
+  }
 
   InitWindow(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, "game");
   SetTargetFPS(properties.FPS_LOCK);
@@ -231,8 +251,10 @@ int main(void) {
     const Score *left_score = ecs_get(world, left_paddle, Score);
     const Score *right_score = ecs_get(world, right_paddle, Score);
 
-    DrawText(
+    vec2 pos = {ball_pos->x, ball_pos->y};
+    sr_send_position_to_server(client, pos);
 
+    DrawText(
         TextFormat("Ball Position: x: %.1f, y: %.1f", ball_pos->x, ball_pos->y),
         10.f, 15.f, 20.f, WHITE);
 
@@ -250,6 +272,7 @@ int main(void) {
   }
 
   CloseWindow();
+  free(client);
   ecs_fini(world);
   return 0;
 }

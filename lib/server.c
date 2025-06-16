@@ -57,7 +57,7 @@ Server *sr_create_server(unsigned short port) {
   server->next_client_id = 0;
   pthread_mutex_init(&server->clients_mutex, NULL);
 
-  for (size_t i = 0; i < server->client_count; i++) {
+  for (size_t i = 0; i < MAX_PLAYERS; i++) {
     server->clients[i].active = 0;
   }
 
@@ -84,36 +84,38 @@ void sr_destroy_server(Server *server) {
 }
 
 void sr_start_listen(Server *server) {
-  if ((listen(server->fd, MAX_PLAYERS)) < 0) {
+  if (listen(server->fd, MAX_PLAYERS) < 0) {
     perror("failed listening");
     return;
   }
 
-  printf("Server started listening on port: %d\n",
-         htons(server->servaddr.sin_port));
+  printf("Server listening on port %d...\n", ntohs(server->servaddr.sin_port));
+  printf("Waiting for connections...\n");
 
   while (1) {
-    int client_fd;
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
 
-    char buf[BUFSIZE];
+    int client_fd =
+        accept(server->fd, (struct sockaddr *)&client_addr, &client_len);
 
-    if ((client_fd = accept(server->fd, (struct sockaddr *)&server->servaddr,
-                            (socklen_t *)&server->addrlen)) < 0) {
+    if (client_fd < 0) {
       perror("failed to accept connection");
       continue;
     }
 
+    printf("New connection accepted from %s\n",
+           inet_ntoa(client_addr.sin_addr));
+
     int client_id = sr_add_client(server, client_fd, client_addr);
 
     if (client_id < 0) {
-      perror("failed to add client");
+      printf("Failed to add client (server full or error)\n");
       close(client_fd);
       continue;
     }
 
-    printf("Succesfully added client\n");
+    printf("Successfully added client with ID %d\n", client_id);
   }
 }
 

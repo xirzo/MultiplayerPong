@@ -20,5 +20,6 @@ int main(void) {
 
   sr_start_listen(server);
 
+  sr_destroy_server(server);
   return 0;
 }

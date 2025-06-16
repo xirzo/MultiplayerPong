@@ -16,7 +16,7 @@ int main() {
   }
 
   for (float i = 0; i < 3.f; i++) {
-    vec2 pos = {10.5f + i, 20.3f + i};
+    vec2 pos = {0.f, 0.f + i};
 
     sr_send_position_to_server(client, pos);
 

@@ -1,6 +1,6 @@
 add_executable(${PROJECT_NAME} main.c)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC flecs raylib input movement render aabb utils score)
+target_link_libraries(${PROJECT_NAME} PUBLIC flecs raylib input movement render aabb utils score server)
 
 if (NOT MSVC)
     target_link_libraries(${PROJECT_NAME} PUBLIC m)
@@ -12,6 +12,10 @@ add_executable(pong_server server.c)
 target_include_directories(pong_server PUBLIC ${CMAKE_SOURCE_DIR}/lib)
 target_link_libraries(pong_server PUBLIC server)
 
-add_executable(pong_client client.c)
-target_include_directories(pong_client PUBLIC ${CMAKE_SOURCE_DIR}/lib)
-target_link_libraries(pong_client PUBLIC server)
+add_executable(pong_client_1 client_1.c)
+target_include_directories(pong_client_1 PUBLIC ${CMAKE_SOURCE_DIR}/lib)
+target_link_libraries(pong_client_1 PUBLIC server)
+
+add_executable(pong_client_2 client_2.c)
+target_include_directories(pong_client_2 PUBLIC ${CMAKE_SOURCE_DIR}/lib)
+target_link_libraries(pong_client_2 PUBLIC server)
