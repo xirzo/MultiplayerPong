@@ -127,16 +127,15 @@ void *handle_client(void *arg) {
   printf("Client %d connected from %s\n", con->client_id,
          inet_ntoa(con->addr.sin_addr));
 
-  ServerMessage welcome_msg = {
-      .type = SERVER_MSG_PLAYER_JOINED,
-      .client_id = con->client_id,
-      .timestamp = time(NULL),
-  };
+  if (con->client_id == 0) {
+    ServerMessage is_main_msg = {
+        .type = SERVER_MSG_IS_MAIN,
+        .client_id = con->client_id,
+        .timestamp = time(NULL),
+    };
 
-  strncpy(welcome_msg.data.player_info.player_name, "Player", 31);
-  welcome_msg.data.player_info.player_id = con->client_id;
-
-  sr_send_message_to_all_except(server, con->client_id, &welcome_msg);
+    sr_send_message_to_client(server, con->client_id, &is_main_msg);
+  }
 
   while (con->active) {
     ClientMessage msg;
@@ -149,14 +148,32 @@ void *handle_client(void *arg) {
 
     if (bytes_read == sizeof(ClientMessage)) {
       switch (msg.type) {
-      case CLIENT_MSG_POSITION: {
+      case CLIENT_MSG_PADDLE_POSITION: {
 
         printf("Client %d position: (%.2f, %.2f)\n", con->client_id,
                msg.data.position.x, msg.data.position.y);
 
-        con->position = msg.data.position;
+        con->paddle_position = msg.data.position;
 
-        ServerMessage pos_broadcast = {.type = SERVER_MSG_POSITION_UPDATE,
+        ServerMessage pos_broadcast = {.type =
+                                           SERVER_MSG_PADDLE_POSITION_UPDATE,
+                                       .client_id = con->client_id,
+                                       .timestamp = time(NULL),
+                                       .data.position = msg.data.position};
+        sr_send_message_to_all_except(server, con->client_id, &pos_broadcast);
+        break;
+      }
+      case CLIENT_MSG_BALL_POSITION: {
+        if (con->client_id != 0) {
+          break;
+        }
+
+        printf("Ball from client: %d position: (%.2f, %.2f)\n", con->client_id,
+               msg.data.position.x, msg.data.position.y);
+
+        con->ball_position = msg.data.position;
+
+        ServerMessage pos_broadcast = {.type = SERVER_MSG_BALL_POSITION_UPDATE,
                                        .client_id = con->client_id,
                                        .timestamp = time(NULL),
                                        .data.position = msg.data.position};
@@ -312,7 +329,7 @@ void sr_send_position_to_server(Client *client, vec2 position) {
   }
 
   ClientMessage msg = {
-      .type = CLIENT_MSG_POSITION,
+      .type = CLIENT_MSG_PADDLE_POSITION,
       .data.position = position,
   };
 
@@ -355,4 +372,19 @@ int sr_receive_server_message(Client *client, ServerMessage *msg) {
   } else {
     return -2;
   }
+}
+
+int sr_send_message_to_server(Client *client, const ClientMessage *msg) {
+  if (!client || !msg) {
+    return -1;
+  }
+
+  ssize_t bytes_sent = send(client->server_fd, msg, sizeof(ClientMessage), 0);
+
+  if (bytes_sent != sizeof(ClientMessage)) {
+    perror("ERROR in sr_send_message_to_server");
+    return -2;
+  }
+
+  return 0;
 }

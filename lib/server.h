@@ -11,8 +11,9 @@
 #define MAX_PLAYERS 2
 
 typedef enum {
-  CLIENT_MSG_POSITION = 1,
-  CLIENT_MSG_DISCONNECT = 2
+  CLIENT_MSG_PADDLE_POSITION = 1,
+  CLIENT_MSG_BALL_POSITION = 2,
+  CLIENT_MSG_DISCONNECT = 3
 } ClientMessageType;
 
 typedef struct {
@@ -26,10 +27,11 @@ typedef struct {
 } ClientMessage;
 
 typedef enum {
-  SERVER_MSG_POSITION_UPDATE = 1,
-  SERVER_MSG_PLAYER_JOINED = 2,
-  SERVER_MSG_PLAYER_LEFT = 3,
-  SERVER_MSG_GAME_STATE = 4
+  SERVER_MSG_PADDLE_POSITION_UPDATE = 1,
+  SERVER_MSG_BALL_POSITION_UPDATE = 2,
+  SERVER_MSG_PLAYER_JOINED = 3,
+  SERVER_MSG_PLAYER_LEFT = 4,
+  SERVER_MSG_IS_MAIN = 5,
 } ServerMessageType;
 
 typedef struct {
@@ -60,7 +62,8 @@ typedef struct {
   pthread_t thread_id;
   int client_id;
 
-  vec2 position;
+  vec2 paddle_position;
+  vec2 ball_position;
 } ClientConnection;
 
 typedef struct {
@@ -90,7 +93,9 @@ void sr_send_message_to_all_except(Server *server, int except_client_id,
 void sr_send_message_to_client(Server *server, int client_id,
                                const ServerMessage *message);
 
+// TODO: remove
 void sr_send_position_to_server(Client *client, vec2 position);
+int sr_send_message_to_server(Client *client, const ClientMessage *msg);
 void sr_client_close(Client *client);
 
 int sr_receive_server_message(Client *client, ServerMessage *msg);

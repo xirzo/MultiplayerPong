@@ -15,6 +15,9 @@
 #define UP_DIRECTION -1.f
 #define DOWN_DIRECTION 1.f
 
+// TODO: remove global state
+static bool is_main = false;
+
 typedef struct PlayerInput {
   InputAction up_action;
   InputAction down_action;
@@ -60,7 +63,7 @@ void MoveEnemy(ecs_iter_t *it) {
 
     if (sr_receive_server_message(client, &response) == 0) {
       switch (response.type) {
-      case SERVER_MSG_POSITION_UPDATE: {
+      case SERVER_MSG_PADDLE_POSITION_UPDATE: {
         pos->x =
             properties->SCREEN_WIDTH - properties->PADDLE_SCREEN_SIZE_MARGIN;
         pos->y = response.data.position.y;
@@ -69,6 +72,37 @@ void MoveEnemy(ecs_iter_t *it) {
       default: {
         break;
       }
+      }
+    }
+  }
+}
+
+typedef struct {
+  Client *client;
+  const Properties *properties;
+  ecs_entity_t ball_entity;
+} NetworkContext;
+
+void UpdateBallFromNetwork(ecs_iter_t *it) {
+  Position *positions = ecs_field(it, Position, 0);
+
+  NetworkContext *ctx = (NetworkContext *)it->param;
+  Client *client = ctx->client;
+
+  for (size_t i = 0; i < it->count; i++) {
+    Position *pos = &positions[i];
+
+    ServerMessage response;
+    while (sr_receive_server_message(client, &response) == 0) {
+      switch (response.type) {
+      case SERVER_MSG_BALL_POSITION_UPDATE:
+        printf("Non-main client: Updated ball position to (%.2f, %.2f)\n",
+               response.data.position.x, response.data.position.y);
+        pos->x = response.data.position.x;
+        pos->y = response.data.position.y;
+        break;
+      default:
+        break;
       }
     }
   }
@@ -147,6 +181,7 @@ int main(void) {
   ECS_SYSTEM(world, BallWallCollisions, EcsOnUpdate,
              Position, [inout] BallMovement, [in] Collider, Ball);
   ECS_SYSTEM(world, MoveEnemy, EcsOnUpdate, [out] Position, Enemy);
+  ECS_SYSTEM(world, UpdateBallFromNetwork, EcsOnUpdate, [out] Position, Ball);
 
   Input left_paddle_input;
   InitInput(&left_paddle_input);
@@ -231,6 +266,9 @@ int main(void) {
 
   ecs_add_id(world, ball, Ball);
 
+  NetworkContext network_ctx = {
+      .client = client, .properties = &properties, .ball_entity = ball};
+
   ecs_entity_t upper_wall =
       ecs_insert(world, ecs_value(Position, {.x = 0, .y = 0}),
                  ecs_value(Collider, {properties.SCREEN_WIDTH,
@@ -245,19 +283,54 @@ int main(void) {
   ecs_add_id(world, lower_wall, Wall);
 
   while (!WindowShouldClose()) {
+    ServerMessage msg;
+
+    while (sr_receive_server_message(client, &msg) == 0) {
+      switch (msg.type) {
+      case SERVER_MSG_IS_MAIN:
+        printf("Current client is main\n");
+        is_main = true;
+        break;
+      case SERVER_MSG_BALL_POSITION_UPDATE:
+        if (!is_main) {
+          printf("Received ball position update: (%.2f, %.2f)\n",
+                 msg.data.position.x, msg.data.position.y);
+          ecs_set(world, ball, Position,
+                  {.x = msg.data.position.x, .y = msg.data.position.y});
+        }
+        break;
+      default:
+        break;
+      }
+    }
+
     UpdateInput(&left_paddle_input);
 
     ecs_run(world, ecs_id(ClampPosition), GetFrameTime(), NULL);
-    ecs_run(world, ecs_id(BallScoringSystem), GetFrameTime(),
-            (void *)&properties);
-    ecs_run(world, ecs_id(BallPaddleCollisions), GetFrameTime(), NULL);
-    ecs_run(world, ecs_id(BallWallCollisions), GetFrameTime(), NULL);
     ecs_run(world, ecs_id(HandlePlayerInputActions), GetFrameTime(),
             (void *)&properties);
     ecs_run(world, ecs_id(MovePaddle), GetFrameTime(), NULL);
-    ecs_run(world, ecs_id(MoveBall), GetFrameTime(), NULL);
-
     ecs_run(world, ecs_id(MoveEnemy), GetFrameTime(), (void *)&ctx);
+
+    if (is_main) {
+      ecs_run(world, ecs_id(BallScoringSystem), GetFrameTime(),
+              (void *)&properties);
+      ecs_run(world, ecs_id(BallPaddleCollisions), GetFrameTime(), NULL);
+      ecs_run(world, ecs_id(BallWallCollisions), GetFrameTime(), NULL);
+      ecs_run(world, ecs_id(MoveBall), GetFrameTime(), NULL);
+
+      const Position *ball_pos = ecs_get(world, ball, Position);
+
+      const ClientMessage ball_msg = {
+          .type = CLIENT_MSG_BALL_POSITION,
+          .data.position = {ball_pos->x, ball_pos->y},
+      };
+
+      sr_send_message_to_server(client, &ball_msg);
+    } else {
+      ecs_run(world, ecs_id(UpdateBallFromNetwork), GetFrameTime(),
+              (void *)&network_ctx);
+    }
 
     // TODO: add system for player_pos sending
     const Position *player_pos = ecs_get(world, player, Position);
@@ -278,11 +351,14 @@ int main(void) {
         TextFormat("Ball Position: x: %.1f, y: %.1f", ball_pos->x, ball_pos->y),
         10.f, 15.f, 20.f, WHITE);
 
-    DrawText(TextFormat("Left score: %d", left_score->value), 10.f, 35.f, 20.f,
-             WHITE);
+    if (is_main) {
 
-    DrawText(TextFormat("Right score: %d", right_score->value), 10.f, 55.f,
-             20.f, WHITE);
+      DrawText(TextFormat("Left score: %d", left_score->value), 10.f, 35.f,
+               20.f, WHITE);
+
+      DrawText(TextFormat("Right score: %d", right_score->value), 10.f, 55.f,
+               20.f, WHITE);
+    }
 
     DrawFPS(10.f, properties.SCREEN_HEIGHT - 30.f);
 #endif

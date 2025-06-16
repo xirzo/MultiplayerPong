@@ -50,7 +50,7 @@ int main() {
 
 void handle_server_message(const ServerMessage *msg) {
   switch (msg->type) {
-  case SERVER_MSG_POSITION_UPDATE:
+  case SERVER_MSG_PADDLE_POSITION_UPDATE:
     printf("Player %d moved to (%.2f, %.2f)\n", msg->client_id,
            msg->data.position.x, msg->data.position.y);
     break;
