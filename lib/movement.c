@@ -1,13 +1,12 @@
 #include "movement.h"
 #include "utils.h"
 #include <stddef.h>
-#include <stdio.h>
 
 void MoveBall(ecs_iter_t *it) {
   Position *positions = ecs_field(it, Position, 0);
   BallMovement *movements = ecs_field(it, BallMovement, 1);
 
-  for (size_t i = 0; i < it->count; i++) {
+  for (int i = 0; i < it->count; i++) {
     Position *pos = &positions[i];
     BallMovement *movement = &movements[i];
 
@@ -16,8 +15,6 @@ void MoveBall(ecs_iter_t *it) {
     } else if (movement->current_speed > movement->max_speed) {
       movement->current_speed = movement->max_speed;
     }
-
-    float direction_magnitude = vec2_magnitude(&movement->direction);
 
     vec2_normalize(&movement->direction);
 
@@ -32,11 +29,11 @@ void MoveBall(ecs_iter_t *it) {
   }
 }
 
-void MovePaddle(ecs_iter_t *it) {
+void MovePlayerSystem(ecs_iter_t *it) {
   Position *positions = ecs_field(it, Position, 0);
   PaddleMovement *movements = ecs_field(it, PaddleMovement, 1);
 
-  for (size_t i = 0; i < it->count; i++) {
+  for (int i = 0; i < it->count; i++) {
     Position *pos = &positions[i];
     PaddleMovement *movement = &movements[i];
 
@@ -45,11 +42,11 @@ void MovePaddle(ecs_iter_t *it) {
   }
 }
 
-void ClampPosition(ecs_iter_t *it) {
+void ClampMovementSystem(ecs_iter_t *it) {
   Position *positions = ecs_field(it, Position, 0);
   MovementClamp *clamps = ecs_field(it, MovementClamp, 1);
 
-  for (size_t i = 0; i < it->count; i++) {
+  for (int i = 0; i < it->count; i++) {
     Position *pos = &positions[i];
     MovementClamp *clamp = &clamps[i];
 

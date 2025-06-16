@@ -2,6 +2,7 @@
 #include "flecs.h"
 #include "input.h"
 #include "movement.h"
+#include "player.h"
 #include "properties.h"
 #include "raylib.h"
 #include "render.h"
@@ -10,7 +11,7 @@
 #include <stdio.h>
 #include <wchar.h>
 
-#define DEBUGGING
+// #define DEBUGGING
 
 #define UP_DIRECTION -1.f
 #define DOWN_DIRECTION 1.f
@@ -24,11 +25,11 @@ typedef struct PlayerInput {
   Input *input;
 } PlayerInput;
 
-void HandlePlayerInputActions(ecs_iter_t *it) {
+void ProcessInputSystem(ecs_iter_t *it) {
   PaddleMovement *movements = ecs_field(it, PaddleMovement, 0);
   PlayerInput *inputs = ecs_field(it, PlayerInput, 1);
 
-  for (size_t i = 0; i < it->count; i++) {
+  for (int i = 0; i < it->count; i++) {
     movements[i].direction.y = 0;
 
     Input *input = inputs[i].input;
@@ -45,17 +46,14 @@ void HandlePlayerInputActions(ecs_iter_t *it) {
 // TODO: remove context resolve this via new system
 typedef struct {
   Client *client;
-  const Properties *properties;
 } MoveEnemyContext;
 
-void MoveEnemy(ecs_iter_t *it) {
+void MoveEnemySystem(ecs_iter_t *it) {
   Position *positions = ecs_field(it, Position, 0);
 
-  MoveEnemyContext *ctx = (MoveEnemyContext *)it->param;
-  Client *client = ctx->client;
-  const Properties *properties = ctx->properties;
+  Client *client = (Client *)it->param;
 
-  for (size_t i = 0; i < it->count; i++) {
+  for (int i = 0; i < it->count; i++) {
     Position *pos = &positions[i];
 
     ServerMessage response;
@@ -67,16 +65,16 @@ void MoveEnemy(ecs_iter_t *it) {
                response.data.position.y);
 
         if (is_main) {
-          pos->x = properties->SCREEN_WIDTH -
-                   properties->PADDLE_SCREEN_SIZE_MARGIN -
-                   properties->PADDLE_WIDTH;
+          pos->x = g_Properties.SCREEN_WIDTH -
+                   g_Properties.PADDLE_SCREEN_SIZE_MARGIN -
+                   g_Properties.PADDLE_WIDTH;
           pos->y = response.data.position.y;
-          printf("Main client: Set enemy paddle to right side (%.2f, %.2f)\n",
+          printf("Main client: Set enemy paddle to right side (%.2f,%.2f)\n",
                  pos->x, pos->y);
         } else {
-          float mirrored_x = properties->SCREEN_WIDTH -
+          float mirrored_x = g_Properties.SCREEN_WIDTH -
                              response.data.position.x -
-                             properties->PADDLE_WIDTH;
+                             g_Properties.PADDLE_WIDTH;
 
           pos->x = mirrored_x;
           pos->y = response.data.position.y;
@@ -96,25 +94,23 @@ void MoveEnemy(ecs_iter_t *it) {
 
 typedef struct {
   Client *client;
-  const Properties *properties;
   ecs_entity_t ball_entity;
 } NetworkContext;
 
 void UpdateBallFromNetwork(ecs_iter_t *it) {
   Position *positions = ecs_field(it, Position, 0);
 
-  NetworkContext *ctx = (NetworkContext *)it->param;
-  Client *client = ctx->client;
-  const Properties *properties = ctx->properties;
+  Client *client = (Client *)it->param;
 
-  for (size_t i = 0; i < it->count; i++) {
+  for (int i = 0; i < it->count; i++) {
     Position *pos = &positions[i];
 
     ServerMessage response;
+
     while (sr_receive_server_message(client, &response) == 0) {
       switch (response.type) {
       case SERVER_MSG_BALL_POSITION_UPDATE: {
-        float mirrored_x = properties->SCREEN_WIDTH - response.data.position.x;
+        float mirrored_x = g_Properties.SCREEN_WIDTH - response.data.position.x;
         float mirrored_y = response.data.position.y;
 
         printf("Non-main client: Ball position (%.2f, %.2f) -> mirrored (%.2f, "
@@ -134,24 +130,6 @@ void UpdateBallFromNetwork(ecs_iter_t *it) {
 }
 
 int main(void) {
-  const Properties properties = {
-      .SCREEN_WIDTH = 600,
-      .SCREEN_HEIGHT = 300,
-      .FPS_LOCK = 60,
-      .PADDLE_SPEED = 450.f,
-      .PADDLE_WIDTH = 20.f,
-      .PADDLE_HEIGHT = 80.f,
-      .PADDLE_SCREEN_SIZE_MARGIN = 50.f,
-      .BALL_SIDE = 10.f,
-      .BALL_MIN_SPEED = 450.f,
-      .BALL_MAX_SPEED = 650.f,
-      .BALL_INITIAL_DIRECTION = {0.7f, -0.7f},
-      .WALL_THICKNESS = 10.f,
-      .MIDDLE_LINE_WIDTH = 10.f,
-      .SERVER_IP = "127.0.0.1",
-      .SERVER_PORT = 8080,
-  };
-
   Client *client = malloc(sizeof(Client));
 
   if (!client) {
@@ -159,19 +137,17 @@ int main(void) {
     return 1;
   }
 
-  if ((sr_client_connect(client, properties.SERVER_IP,
-                         properties.SERVER_PORT)) != 0) {
+  if ((sr_client_connect(client, g_Properties.SERVER_IP,
+                         g_Properties.SERVER_PORT)) != 0) {
     fprintf(stderr, "error: Failed to connect to the server\n");
     fprintf(stderr, "Make sure the server is running on %s:%d\n",
-            properties.SERVER_IP, properties.SERVER_PORT);
+            g_Properties.SERVER_IP, g_Properties.SERVER_PORT);
     free(client);
     return 1;
   }
 
-  MoveEnemyContext ctx = {.client = client, .properties = &properties};
-
-  InitWindow(properties.SCREEN_WIDTH, properties.SCREEN_HEIGHT, "game");
-  SetTargetFPS(properties.FPS_LOCK);
+  InitWindow(g_Properties.SCREEN_WIDTH, g_Properties.SCREEN_HEIGHT, "game");
+  SetTargetFPS(g_Properties.FPS_LOCK);
 
   ecs_world_t *world = ecs_init();
 
@@ -184,6 +160,8 @@ int main(void) {
   ECS_COMPONENT(world, Collider);
   ECS_COMPONENT(world, Score);
 
+  ECS_COMPONENT(world, Player);
+
   ECS_TAG(world, Ball);
   // TODO: rename Paddle to Player
   // TODO: solve problem of having 3 tags
@@ -191,22 +169,23 @@ int main(void) {
   ECS_TAG(world, Enemy);
   ECS_TAG(world, Wall);
 
-  ECS_SYSTEM(world, BallScoringSystem,
+  ECS_SYSTEM(world, ScoreCountSystem,
              EcsOnUpdate, [out] Position, [inout] BallMovement, Ball);
   ECS_SYSTEM(world, MoveBall, EcsOnUpdate, [out] Position, [inout] BallMovement,
              Ball);
-  ECS_SYSTEM(world, MovePaddle,
+  ECS_SYSTEM(world, MovePlayerSystem,
              EcsOnUpdate, [out] Position, [inout] PaddleMovement, Paddle);
-  ECS_SYSTEM(world, ClampPosition, EcsOnUpdate, [out] Position, MovementClamp);
+  ECS_SYSTEM(world, ClampMovementSystem, EcsOnUpdate, [out] Position,
+             MovementClamp);
   ECS_SYSTEM(world, RenderRectangle,
              EcsOnUpdate, [in] Position, [in] RenderableRectangle);
-  ECS_SYSTEM(world, HandlePlayerInputActions,
+  ECS_SYSTEM(world, ProcessInputSystem,
              EcsOnUpdate, [out] PaddleMovement, [in] PlayerInput);
   ECS_SYSTEM(world, BallPaddleCollisions, EcsOnUpdate,
              Position, [inout] BallMovement, [in] Collider, Ball);
   ECS_SYSTEM(world, BallWallCollisions, EcsOnUpdate,
              Position, [inout] BallMovement, [in] Collider, Ball);
-  ECS_SYSTEM(world, MoveEnemy, EcsOnUpdate, [out] Position, Enemy);
+  ECS_SYSTEM(world, MoveEnemySystem, EcsOnUpdate, [out] Position, Enemy);
   ECS_SYSTEM(world, UpdateBallFromNetwork, EcsOnUpdate, [out] Position, Ball);
 
   Input left_paddle_input;
@@ -216,19 +195,19 @@ int main(void) {
 
   ecs_entity_t player =
       ecs_insert(world,
-                 ecs_value(Position, {properties.PADDLE_SCREEN_SIZE_MARGIN,
-                                      (float)properties.SCREEN_HEIGHT / 2 -
-                                          properties.PADDLE_HEIGHT / 2}),
+                 ecs_value(Position, {g_Properties.PADDLE_SCREEN_SIZE_MARGIN,
+                                      (float)g_Properties.SCREEN_HEIGHT / 2 -
+                                          g_Properties.PADDLE_HEIGHT / 2}),
                  ecs_value(PaddleMovement,
                            {
-                               .speed = properties.PADDLE_SPEED,
+                               .speed = g_Properties.PADDLE_SPEED,
                                .direction = {0, 0},
                                .velocity = {0, 0},
                            }),
                  ecs_value(RenderableRectangle,
                            {
-                               .width = properties.PADDLE_WIDTH,
-                               .height = properties.PADDLE_HEIGHT,
+                               .width = g_Properties.PADDLE_WIDTH,
+                               .height = g_Properties.PADDLE_HEIGHT,
                                .color = RED,
                            }),
                  ecs_value(PlayerInput,
@@ -237,76 +216,79 @@ int main(void) {
                                .down_action = ACTION_MOVE_DOWN,
                                .input = &left_paddle_input,
                            }),
+
+                 ecs_value(Player,
+                           {
+                               .is_main = 0,
+                           }),
                  ecs_value(Collider,
                            {
-                               .width = properties.PADDLE_WIDTH,
-                               .height = properties.PADDLE_HEIGHT,
+                               .width = g_Properties.PADDLE_WIDTH,
+                               .height = g_Properties.PADDLE_HEIGHT,
                            }),
                  ecs_value(MovementClamp,
                            {
                                .lower_limit = 0,
-                               .upper_limit = properties.SCREEN_HEIGHT -
-                                              properties.PADDLE_HEIGHT,
+                               .upper_limit = g_Properties.SCREEN_HEIGHT -
+                                              g_Properties.PADDLE_HEIGHT,
                            }),
                  ecs_value(Score, {.value = 0}));
 
   ecs_add_id(world, player, Paddle);
 
-  ecs_entity_t enemy =
-      ecs_insert(world,
-                 ecs_value(Position, {properties.SCREEN_WIDTH -
-                                          properties.PADDLE_SCREEN_SIZE_MARGIN -
-                                          properties.PADDLE_WIDTH,
-                                      (float)properties.SCREEN_HEIGHT / 2 -
-                                          properties.PADDLE_HEIGHT / 2}),
-                 ecs_value(RenderableRectangle,
-                           {
-                               .width = properties.PADDLE_WIDTH,
-                               .height = properties.PADDLE_HEIGHT,
-                               .color = GREEN,
-                           }),
-                 ecs_value(Collider,
-                           {
-                               .width = properties.PADDLE_WIDTH,
-                               .height = properties.PADDLE_HEIGHT,
-                           }),
-                 ecs_value(Score, {.value = 0}));
+  ecs_entity_t enemy = ecs_insert(
+      world,
+      ecs_value(Position, {g_Properties.SCREEN_WIDTH -
+                               g_Properties.PADDLE_SCREEN_SIZE_MARGIN -
+                               g_Properties.PADDLE_WIDTH,
+                           (float)g_Properties.SCREEN_HEIGHT / 2 -
+                               g_Properties.PADDLE_HEIGHT / 2}),
+      ecs_value(RenderableRectangle,
+                {
+                    .width = g_Properties.PADDLE_WIDTH,
+                    .height = g_Properties.PADDLE_HEIGHT,
+                    .color = GREEN,
+                }),
+      ecs_value(Collider,
+                {
+                    .width = g_Properties.PADDLE_WIDTH,
+                    .height = g_Properties.PADDLE_HEIGHT,
+                }),
+      ecs_value(Score, {.value = 0}));
 
   ecs_add_id(world, enemy, Enemy);
   ecs_add_id(world, enemy, Paddle);
 
   ecs_entity_t ball = ecs_insert(
       world,
-      ecs_value(Position, {.x = (float)properties.SCREEN_WIDTH / 2,
-                           .y = (float)properties.SCREEN_HEIGHT / 2}),
+      ecs_value(Position, {.x = (float)g_Properties.SCREEN_WIDTH / 2,
+                           .y = (float)g_Properties.SCREEN_HEIGHT / 2}),
       ecs_value(BallMovement,
                 {
-                    .current_speed = properties.BALL_MIN_SPEED,
-                    .min_speed = properties.BALL_MIN_SPEED,
-                    .max_speed = properties.BALL_MAX_SPEED,
-                    .direction = properties.BALL_INITIAL_DIRECTION,
+                    .current_speed = g_Properties.BALL_MIN_SPEED,
+                    .min_speed = g_Properties.BALL_MIN_SPEED,
+                    .max_speed = g_Properties.BALL_MAX_SPEED,
+                    .direction = g_Properties.BALL_INITIAL_DIRECTION,
                     .velocity = {0, 0},
                 }),
       ecs_value(RenderableRectangle,
-                {properties.BALL_SIDE, properties.BALL_SIDE, WHITE}),
-      ecs_value(Collider, {properties.BALL_SIDE, properties.BALL_SIDE}));
+                {g_Properties.BALL_SIDE, g_Properties.BALL_SIDE, WHITE}),
+      ecs_value(Collider, {g_Properties.BALL_SIDE, g_Properties.BALL_SIDE}));
 
   ecs_add_id(world, ball, Ball);
 
-  NetworkContext network_ctx = {
-      .client = client, .properties = &properties, .ball_entity = ball};
-
   ecs_entity_t upper_wall =
       ecs_insert(world, ecs_value(Position, {.x = 0, .y = 0}),
-                 ecs_value(Collider, {properties.SCREEN_WIDTH,
-                                      properties.WALL_THICKNESS}));
-
-  ecs_entity_t lower_wall = ecs_insert(
-      world, ecs_value(Position, {.x = 0, .y = properties.SCREEN_HEIGHT}),
-      ecs_value(Collider,
-                {properties.SCREEN_WIDTH, properties.WALL_THICKNESS}));
+                 ecs_value(Collider, {g_Properties.SCREEN_WIDTH,
+                                      g_Properties.WALL_THICKNESS}));
 
   ecs_add_id(world, upper_wall, Wall);
+
+  ecs_entity_t lower_wall = ecs_insert(
+      world, ecs_value(Position, {.x = 0, .y = g_Properties.SCREEN_HEIGHT}),
+      ecs_value(Collider,
+                {g_Properties.SCREEN_WIDTH, g_Properties.WALL_THICKNESS}));
+
   ecs_add_id(world, lower_wall, Wall);
 
   while (!WindowShouldClose()) {
@@ -314,44 +296,44 @@ int main(void) {
 
     while (sr_receive_server_message(client, &msg) == 0) {
       switch (msg.type) {
-      case SERVER_MSG_IS_MAIN:
-        printf("Current client is main\n");
+      case SERVER_MSG_IS_MAIN: {
         is_main = true;
 
-        ecs_set(world, player, Position,
-                {.x = properties.PADDLE_SCREEN_SIZE_MARGIN,
-                 .y = (float)properties.SCREEN_HEIGHT / 2 -
-                      properties.PADDLE_HEIGHT / 2});
-        ecs_set(world, enemy, Position,
-                {.x = properties.SCREEN_WIDTH -
-                      properties.PADDLE_SCREEN_SIZE_MARGIN -
-                      properties.PADDLE_WIDTH,
-                 .y = (float)properties.SCREEN_HEIGHT / 2 -
-                      properties.PADDLE_HEIGHT / 2});
-        break;
+        // FIX: move this into MoveEnemySystem (why does this move player)
+        // ecs_set(world, player, Position,
+        //         {.x = g_Properties.PADDLE_SCREEN_SIZE_MARGIN,
+        //          .y = (float)g_Properties.SCREEN_HEIGHT / 2 -
+        //               g_Properties.PADDLE_HEIGHT / 2});
 
-      case SERVER_MSG_BALL_POSITION_UPDATE:
+        // ecs_set(world, enemy, Position,
+        //         {.x = g_Properties.SCREEN_WIDTH -
+        //               g_Properties.PADDLE_SCREEN_SIZE_MARGIN -
+        //               g_Properties.PADDLE_WIDTH,
+        //          .y = (float)g_Properties.SCREEN_HEIGHT / 2 -
+        //               g_Properties.PADDLE_HEIGHT / 2});
+        break;
+      }
+
+      case SERVER_MSG_BALL_POSITION_UPDATE: {
         if (!is_main) {
-          float mirrored_x = properties.SCREEN_WIDTH - msg.data.position.x;
+          float mirrored_x = g_Properties.SCREEN_WIDTH - msg.data.position.x;
           float mirrored_y = msg.data.position.y;
           ecs_set(world, ball, Position, {.x = mirrored_x, .y = mirrored_y});
         }
         break;
+      }
 
       case SERVER_MSG_PADDLE_POSITION_UPDATE: {
-        printf("Received paddle position update from client %d: (%.2f, %.2f)\n",
-               msg.client_id, msg.data.position.x, msg.data.position.y);
-
         if (is_main) {
           ecs_set(world, enemy, Position,
-                  {.x = properties.SCREEN_WIDTH -
-                        properties.PADDLE_SCREEN_SIZE_MARGIN -
-                        properties.PADDLE_WIDTH,
+                  {.x = g_Properties.SCREEN_WIDTH -
+                        g_Properties.PADDLE_SCREEN_SIZE_MARGIN -
+                        g_Properties.PADDLE_WIDTH,
                    .y = msg.data.position.y});
           printf("Main client: Updated enemy paddle on right\n");
         } else {
-          float mirrored_x = properties.SCREEN_WIDTH - msg.data.position.x -
-                             properties.PADDLE_WIDTH;
+          float mirrored_x = g_Properties.SCREEN_WIDTH - msg.data.position.x -
+                             g_Properties.PADDLE_WIDTH;
           ecs_set(world, enemy, Position,
                   {.x = mirrored_x, .y = msg.data.position.y});
           printf("Non-main: Set enemy paddle on right at (%.2f, %.2f)\n",
@@ -367,15 +349,15 @@ int main(void) {
 
     UpdateInput(&left_paddle_input);
 
-    ecs_run(world, ecs_id(ClampPosition), GetFrameTime(), NULL);
-    ecs_run(world, ecs_id(HandlePlayerInputActions), GetFrameTime(),
-            (void *)&properties);
-    ecs_run(world, ecs_id(MovePaddle), GetFrameTime(), NULL);
-    ecs_run(world, ecs_id(MoveEnemy), GetFrameTime(), (void *)&ctx);
+    ecs_run(world, ecs_id(ClampMovementSystem), GetFrameTime(), NULL);
+    ecs_run(world, ecs_id(ProcessInputSystem), GetFrameTime(),
+            (void *)&g_Properties);
+    ecs_run(world, ecs_id(MovePlayerSystem), GetFrameTime(), NULL);
+    // ecs_run(world, ecs_id(MoveEnemySystem), GetFrameTime(), (void *)client);
 
     if (is_main) {
-      ecs_run(world, ecs_id(BallScoringSystem), GetFrameTime(),
-              (void *)&properties);
+      ecs_run(world, ecs_id(ScoreCountSystem), GetFrameTime(),
+              (void *)&g_Properties);
       ecs_run(world, ecs_id(BallPaddleCollisions), GetFrameTime(), NULL);
       ecs_run(world, ecs_id(BallWallCollisions), GetFrameTime(), NULL);
       ecs_run(world, ecs_id(MoveBall), GetFrameTime(), NULL);
@@ -390,22 +372,42 @@ int main(void) {
       sr_send_message_to_server(client, &ball_msg);
     } else {
       const Position *current_player_pos = ecs_get(world, player, Position);
-      if (current_player_pos->x > (float)properties.SCREEN_WIDTH / 2) {
+
+      if (current_player_pos->x > (float)g_Properties.SCREEN_WIDTH / 2) {
         ecs_set(world, player, Position,
-                {.x = properties.PADDLE_SCREEN_SIZE_MARGIN,
+                {.x = g_Properties.PADDLE_SCREEN_SIZE_MARGIN,
                  .y = current_player_pos->y});
       }
     }
 
     // TODO: add system for player_pos sending
-    const Position *player_pos = ecs_get(world, player, Position);
-    sr_send_position_to_server(client, (vec2){player_pos->x, player_pos->y});
+
+    ecs_query_t *player_q =
+        ecs_query(world, {.terms = {{.id = ecs_id(Position), .inout = EcsIn},
+                                    {.id = ecs_id(Player), .inout = EcsIn}},
+
+                          .cache_kind = EcsQueryCacheAuto});
+
+    ecs_iter_t it = ecs_query_iter(world, player_q);
+
+    while (ecs_query_next(&it)) {
+      Position *p = ecs_field(&it, Position, 0);
+
+      for (int i = 0; i < it.count; i++) {
+        sr_send_position_to_server(client, (vec2){p[i].x, p[i].y});
+      }
+    }
+
+    ecs_query_fini(player_q);
 
     BeginDrawing();
     ClearBackground(BLACK);
 
-    DrawRectangle(properties.SCREEN_WIDTH / 2, 0, properties.MIDDLE_LINE_WIDTH,
-                  properties.SCREEN_HEIGHT, WHITE);
+    ecs_run(world, ecs_id(RenderRectangle), GetFrameTime(), NULL);
+
+    DrawRectangle(g_Properties.SCREEN_WIDTH / 2, 0,
+                  g_Properties.MIDDLE_LINE_WIDTH, g_Properties.SCREEN_HEIGHT,
+                  WHITE);
 
 #ifdef DEBUGGING
     const Position *ball_pos = ecs_get(world, ball, Position);
@@ -425,10 +427,9 @@ int main(void) {
                20.f, WHITE);
     }
 
-    DrawFPS(10.f, properties.SCREEN_HEIGHT - 30.f);
+    DrawFPS(10.f, g_Properties.SCREEN_HEIGHT - 30.f);
 #endif
 
-    ecs_run(world, ecs_id(RenderRectangle), GetFrameTime(), NULL);
     EndDrawing();
   }
 

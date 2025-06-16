@@ -6,7 +6,7 @@
 #include "properties.h"
 #include "score.h"
 
-void BallScoringSystem(ecs_iter_t *it) {
+void ScoreCountSystem(ecs_iter_t *it) {
   Position *positions = ecs_field(it, Position, 0);
   BallMovement *movements = ecs_field(it, BallMovement, 1);
 

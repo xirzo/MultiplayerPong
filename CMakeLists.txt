@@ -4,6 +4,8 @@ project(ecs)
 
 option(FETCH_LIBS OFF)
 
+add_compile_options(-Wunused-function -Wall -Wextra -Wpedantic)
+
 if (FETCH_LIBS)
     include(FetchContent)
 

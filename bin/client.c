@@ -6,7 +6,7 @@
 
 static void handle_server_message(const ServerMessage *msg);
 
-int main() {
+int main(void) {
   Client *client = malloc(sizeof(Client));
 
   if (sr_client_connect(client, "127.0.0.1", 8080) != 0) {

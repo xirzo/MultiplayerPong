@@ -31,7 +31,7 @@ typedef struct MovementClamp {
 } MovementClamp;
 
 void MoveBall(ecs_iter_t *it);
-void MovePaddle(ecs_iter_t *it);
-void ClampPosition(ecs_iter_t *it);
+void MovePlayerSystem(ecs_iter_t *it);
+void ClampMovementSystem(ecs_iter_t *it);
 
 #endif // !MOVEMENT_H
