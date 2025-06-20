@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24.1)
 
-project(ecs)
+project(pong_client)
 
 option(FETCH_LIBS OFF)
 
