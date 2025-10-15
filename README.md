@@ -1,23 +1,27 @@
 # Multiplayer Pong
 
-A game made to learn something about [ECS](https://en.wikipedia.org/wiki/Entity_component_system), only Linux is supported. Uses TCP for networking, seems to work just fine for 2 players. When I used same networking for syncing movements of 3 players latency increased drastically.
+<img width="1806" height="629" alt="pong" src="https://github.com/user-attachments/assets/6863ce08-90c0-42b5-8031-f7f8561f6a13" />
 
-![image](https://github.com/user-attachments/assets/6d69f8f2-e079-4a09-8b78-c303faa134ec)
+A game made to learn [ECS](https://en.wikipedia.org/wiki/Entity_component_system), only Linux is supported. Uses TCP for networking, seems to work just fine for 2 players. When I used the same networking for syncing movements of 3 players - latency increased drastically.
 
-## Movement
+## Building & Running
 
-- Move Up - J
-- Move Down - K
+> [!NOTE] 
+> In order to use `FETCH_LIBS=OFF` you must have libraries installed of your machine.
 
-## Building
-
+```sh
+cmake -DFETCH_LIBS=ON -B build/
+cmake --build build/
 ```
-git clone https://github.com/xirzo/MultiplayerPong
-cd MultiplayerPong
-mkdir build
-cmake -B build -DFETCH_LIBS=1
-cmake --build build
-```
+
+Now `cd` into `build/bin` directory (that's needed because resources are not baked into binary), run **server** and connect with 2 **clients**.
+
+## Controls
+
+| Key | Action |
+|-----|--------|
+| `J` | Move up |
+| `K` | Move down |
 
 ## Dependencies
 
