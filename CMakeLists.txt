@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.24.1)
 
 project(pong_client)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 option(FETCH_LIBS OFF)
 
 add_compile_options(-Wunused-function -Wall -Wextra -Wpedantic)
