@@ -16,9 +16,6 @@
 #define UP_DIRECTION   -1.f
 #define DOWN_DIRECTION 1.f
 
-// TODO: remove global state
-static bool is_main = false;
-
 typedef struct PlayerInput {
     InputAction up_action;
     InputAction down_action;
@@ -43,21 +40,16 @@ void ProcessInputSystem(ecs_iter_t *it) {
     }
 }
 
-// TODO: remove context resolve this via new system
-typedef struct {
-    Client *client;
-} MoveEnemyContext;
-
 void MoveEnemySystem(ecs_iter_t *it) {
     Position *positions = ecs_field(it, Position, 0);
 
-    Client *client = (Client *)it->param;
+    UDPClient *client = (UDPClient *)it->param;
 
     for (int i = 0; i < it->count; i++) {
         Position *pos = &positions[i];
 
         ServerMessage response;
-        if (sr_receive_server_message(client, &response) == 0) {
+        if (sr_receive_udp_server_message(client, &response) == 0) {
             switch (response.type) {
                 case SERVER_MSG_PADDLE_POSITION_UPDATE: {
                     printf(
@@ -67,7 +59,7 @@ void MoveEnemySystem(ecs_iter_t *it) {
                         response.data.position.y
                     );
 
-                    if (is_main) {
+                    if (client->is_main) {
                         pos->x = g_Properties.SCREEN_WIDTH
                                - g_Properties.PADDLE_SCREEN_SIZE_MARGIN
                                - g_Properties.PADDLE_WIDTH;
@@ -103,21 +95,21 @@ void MoveEnemySystem(ecs_iter_t *it) {
 }
 
 typedef struct {
-    Client      *client;
+    UDPClient   *client;
     ecs_entity_t ball_entity;
 } NetworkContext;
 
 void UpdateBallFromNetwork(ecs_iter_t *it) {
     Position *positions = ecs_field(it, Position, 0);
 
-    Client *client = (Client *)it->param;
+    UDPClient *client = (UDPClient *)it->param;
 
     for (int i = 0; i < it->count; i++) {
         Position *pos = &positions[i];
 
         ServerMessage response;
 
-        while (sr_receive_server_message(client, &response) == 0) {
+        while (sr_receive_udp_server_message(client, &response) == 0) {
             switch (response.type) {
                 case SERVER_MSG_BALL_POSITION_UPDATE: {
                     float mirrored_x =
@@ -154,14 +146,14 @@ int main(void) {
         printf("Using default settings\n");
     }
 
-    Client *client = malloc(sizeof(Client));
+    UDPClient *client = malloc(sizeof(UDPClient));
 
     if (!client) {
         fprintf(stderr, "error: Failed to allocate memory for client\n");
         return 1;
     }
 
-    if ((sr_client_connect(
+    if ((sr_udp_client_connect(
             client, g_Properties.SERVER_IP, g_Properties.SERVER_PORT
         ))
         != 0) {
@@ -176,6 +168,7 @@ int main(void) {
         return 1;
     }
 
+    SetTraceLogLevel(LOG_ERROR);
     InitWindow(g_Properties.SCREEN_WIDTH, g_Properties.SCREEN_HEIGHT, "game");
     SetTargetFPS(g_Properties.FPS_LOCK);
 
@@ -297,6 +290,8 @@ int main(void) {
         ecs_value(
             Player,
             {
+                // NOTE: is this even needed? (I guess only Player tag is
+                // needed)
                 .is_main = 0,
             }
         ),
@@ -399,28 +394,10 @@ int main(void) {
     while (!WindowShouldClose()) {
         ServerMessage msg;
 
-        while (sr_receive_server_message(client, &msg) == 0) {
+        while (sr_receive_udp_server_message(client, &msg) == 0) {
             switch (msg.type) {
-                case SERVER_MSG_IS_MAIN: {
-                    is_main = true;
-
-                    // FIX: move this into MoveEnemySystem (why does this move
-                    // player) ecs_set(world, player, Position,
-                    //         {.x = g_Properties.PADDLE_SCREEN_SIZE_MARGIN,
-                    //          .y = (float)g_Properties.SCREEN_HEIGHT / 2 -
-                    //               g_Properties.PADDLE_HEIGHT / 2});
-
-                    // ecs_set(world, enemy, Position,
-                    //         {.x = g_Properties.SCREEN_WIDTH -
-                    //               g_Properties.PADDLE_SCREEN_SIZE_MARGIN -
-                    //               g_Properties.PADDLE_WIDTH,
-                    //          .y = (float)g_Properties.SCREEN_HEIGHT / 2 -
-                    //               g_Properties.PADDLE_HEIGHT / 2});
-                    break;
-                }
-
                 case SERVER_MSG_BALL_POSITION_UPDATE: {
-                    if (!is_main) {
+                    if (!client->is_main) {
                         float mirrored_x =
                             g_Properties.SCREEN_WIDTH - msg.data.position.x;
                         float mirrored_y = msg.data.position.y;
@@ -435,7 +412,7 @@ int main(void) {
                 }
 
                 case SERVER_MSG_PADDLE_POSITION_UPDATE: {
-                    if (is_main) {
+                    if (client->is_main) {
                         ecs_set(
                             world,
                             enemy,
@@ -480,10 +457,8 @@ int main(void) {
             (void *)&g_Properties
         );
         ecs_run(world, ecs_id(MovePlayerSystem), GetFrameTime(), NULL);
-        // ecs_run(world, ecs_id(MoveEnemySystem), GetFrameTime(), (void
-        // *)client);
 
-        if (is_main) {
+        if (client->is_main) {
             ecs_run(
                 world,
                 ecs_id(ScoreCountSystem),
@@ -501,7 +476,7 @@ int main(void) {
                 .data.position = { ball_pos->x, ball_pos->y },
             };
 
-            sr_send_message_to_server(client, &ball_msg);
+            sr_send_udp_message_to_server(client, &ball_msg);
         } else {
             const Position *current_player_pos =
                 ecs_get(world, player, Position);
@@ -533,7 +508,7 @@ int main(void) {
             Position *p = ecs_field(&it, Position, 0);
 
             for (int i = 0; i < it.count; i++) {
-                sr_send_message_to_server(
+                sr_send_udp_message_to_server(
                     client,
                     &((ClientMessage){ .type = CLIENT_MSG_PADDLE_POSITION,
                                        .data.position =
@@ -572,7 +547,7 @@ int main(void) {
             WHITE
         );
 
-        if (is_main) {
+        if (client->is_main) {
             DrawText(
                 TextFormat("Left score: %d", left_score->value),
                 10.f,
@@ -596,7 +571,7 @@ int main(void) {
         EndDrawing();
     }
 
-    sr_client_close(client);
+    sr_udp_client_close(client);
     free(client);
 
     CloseWindow();

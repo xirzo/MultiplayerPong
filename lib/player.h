@@ -2,7 +2,7 @@
 #define PLAYER_H
 
 typedef struct {
-  int is_main;
+    int is_main;
 } Player;
 
-#endif // !PLAYER_H
+#endif  // !PLAYER_H
