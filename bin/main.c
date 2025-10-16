@@ -145,6 +145,15 @@ void UpdateBallFromNetwork(ecs_iter_t *it) {
 }
 
 int main(void) {
+    if (properties_load_from_file("configuration.game")) {
+        printf("Succesfully loaded properties from configuration file\n");
+        printf(
+            "Server: %s:%d\n", g_Properties.SERVER_IP, g_Properties.SERVER_PORT
+        );
+    } else {
+        printf("Using default settings\n");
+    }
+
     Client *client = malloc(sizeof(Client));
 
     if (!client) {

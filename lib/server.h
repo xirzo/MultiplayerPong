@@ -81,7 +81,7 @@ typedef struct {
     int     client_index;
 } ThreadArgs;
 
-Server *sr_create_server(unsigned short port);
+Server *sr_create_server(char ip[16], unsigned short port);
 void    sr_destroy_server(Server *server);
 void    sr_start_listen(Server *server);
 int     sr_add_client(Server *server, int socket_fd, struct sockaddr_in addr);

@@ -21,7 +21,7 @@
     Server
 */
 
-Server *sr_create_server(unsigned short port) {
+Server *sr_create_server(char ip[16], unsigned short port) {
     Server *server = malloc(sizeof(Server));
 
     if (!server) {
@@ -39,8 +39,14 @@ Server *sr_create_server(unsigned short port) {
     }
 
     server->servaddr.sin_family = AF_INET;
-    server->servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     server->servaddr.sin_port = htons(port);
+
+    if (inet_pton(AF_INET, ip, &server->servaddr.sin_addr) <= 0) {
+        perror("invalid IP address");
+        close(server->fd);
+        free(server);
+        return NULL;
+    }
 
     int optval = 1;
     setsockopt(
