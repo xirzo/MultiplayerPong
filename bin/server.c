@@ -18,15 +18,15 @@ int main(void) {
         printf("Using default settings\n");
     }
 
-    Server *server = sr_create_server(g_Properties.SERVER_PORT);
+    UDPServer *server = sr_create_udp_server(g_Properties.SERVER_PORT);
 
     if (!server) {
         fprintf(stderr, "error: Failed to create server\n");
         return 1;
     }
 
-    sr_start_listen(server);
+    sr_start_udp_listen(server);
 
-    sr_destroy_server(server);
+    sr_destroy_udp_server(server);
     return 0;
 }
