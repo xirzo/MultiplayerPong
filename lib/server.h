@@ -8,96 +8,103 @@
 #include <unistd.h>
 
 #define MAGIC_NUMBER 0x52351aE
-#define MAX_PLAYERS 2
+#define MAX_PLAYERS  2
 
 typedef enum {
-  CLIENT_MSG_PADDLE_POSITION = 1,
-  CLIENT_MSG_BALL_POSITION = 2,
-  CLIENT_MSG_DISCONNECT = 3
+    CLIENT_MSG_PADDLE_POSITION = 1,
+    CLIENT_MSG_BALL_POSITION = 2,
+    CLIENT_MSG_DISCONNECT = 3
 } ClientMessageType;
 
 typedef struct {
-  ClientMessageType type;
-  int client_id;
+    ClientMessageType type;
+    int               client_id;
 
-  union {
-    vec2 position;
-    char text[256];
-  } data;
+    union {
+        vec2 position;
+        char text[256];
+    } data;
 } ClientMessage;
 
 typedef enum {
-  SERVER_MSG_PADDLE_POSITION_UPDATE = 1,
-  SERVER_MSG_BALL_POSITION_UPDATE = 2,
-  SERVER_MSG_PLAYER_JOINED = 3,
-  SERVER_MSG_PLAYER_LEFT = 4,
-  SERVER_MSG_IS_MAIN = 5,
+    SERVER_MSG_PADDLE_POSITION_UPDATE = 1,
+    SERVER_MSG_BALL_POSITION_UPDATE = 2,
+    SERVER_MSG_PLAYER_JOINED = 3,
+    SERVER_MSG_PLAYER_LEFT = 4,
+    SERVER_MSG_IS_MAIN = 5,
 } ServerMessageType;
 
 typedef struct {
-  ServerMessageType type;
-  int client_id;
-  uint32_t timestamp;
-  union {
-    vec2 position;
-    char text[256];
-    struct {
-      int player_id;
-      char player_name[32];
-    } player_info;
-  } data;
+    ServerMessageType type;
+    int               client_id;
+    uint32_t          timestamp;
+    union {
+        vec2 position;
+        char text[256];
+        struct {
+            int  player_id;
+            char player_name[32];
+        } player_info;
+    } data;
 } ServerMessage;
 
 typedef struct {
-  int server_fd;
-  struct sockaddr_in server_addr;
-  socklen_t addr_len;
+    int                server_fd;
+    struct sockaddr_in server_addr;
+    socklen_t          addr_len;
 } Client;
 
 typedef struct {
-  int socket_fd;
-  struct sockaddr_in addr;
-  int active;
-  int is_main;
-  pthread_t thread_id;
-  int client_id;
+    int                socket_fd;
+    struct sockaddr_in addr;
+    int                active;
+    int                is_main;
+    pthread_t          thread_id;
+    int                client_id;
 
-  vec2 paddle_position;
-  vec2 ball_position;
+    vec2 paddle_position;
+    vec2 ball_position;
 } ClientConnection;
 
 typedef struct {
-  int fd;
-  struct sockaddr_in servaddr;
-  socklen_t addrlen;
+    int                fd;
+    struct sockaddr_in servaddr;
+    socklen_t          addrlen;
 
-  ClientConnection clients[MAX_PLAYERS];
-  size_t client_count;
-  pthread_mutex_t clients_mutex;
+    ClientConnection clients[MAX_PLAYERS];
+    size_t           client_count;
+    pthread_mutex_t  clients_mutex;
 } Server;
 
 typedef struct {
-  Server *server;
-  int client_index;
+    Server *server;
+    int     client_index;
 } ThreadArgs;
 
 Server *sr_create_server(unsigned short port);
-void sr_destroy_server(Server *server);
-void sr_start_listen(Server *server);
-int sr_add_client(Server *server, int socket_fd, struct sockaddr_in addr);
-int sr_client_connect(Client *client, const char *server_ip,
-                      unsigned short port);
+void    sr_destroy_server(Server *server);
+void    sr_start_listen(Server *server);
+int     sr_add_client(Server *server, int socket_fd, struct sockaddr_in addr);
+int     sr_client_connect(
+        Client        *client,
+        const char    *server_ip,
+        unsigned short port
+    );
 void sr_send_message_to_all(Server *server, const ServerMessage *message);
-void sr_send_message_to_all_except(Server *server, int except_client_id,
-                                   const ServerMessage *message);
-void sr_send_message_to_client(Server *server, int client_id,
-                               const ServerMessage *message);
+void sr_send_message_to_all_except(
+    Server              *server,
+    int                  except_client_id,
+    const ServerMessage *message
+);
+void sr_send_message_to_client(
+    Server              *server,
+    int                  client_id,
+    const ServerMessage *message
+);
 
-// TODO: remove
-void sr_send_position_to_server(Client *client, vec2 position);
-int sr_send_message_to_server(Client *client, const ClientMessage *msg);
+int  sr_send_message_to_server(Client *client, const ClientMessage *msg);
 void sr_client_close(Client *client);
 
 int sr_receive_server_message(Client *client, ServerMessage *msg);
 
-#endif // !SERVER_H
+#endif  // !SERVER_H
