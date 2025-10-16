@@ -18,8 +18,7 @@ int main(void) {
         printf("Using default settings\n");
     }
 
-    Server *server =
-        sr_create_server(g_Properties.SERVER_IP, g_Properties.SERVER_PORT);
+    Server *server = sr_create_server(g_Properties.SERVER_PORT);
 
     if (!server) {
         fprintf(stderr, "error: Failed to create server\n");
