@@ -14,7 +14,7 @@ cmake -DFETCH_LIBS=ON -B build/
 cmake --build build/
 ```
 
-Now `cd` into `build/bin` directory (that's needed because resources are not baked into binary), run **server** and connect with 2 **clients**.
+Now you may run the binaries: **pong_server** and connect with 2 **pong_client**.
 
 ## Controls
 
