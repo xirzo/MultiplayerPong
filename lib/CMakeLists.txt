@@ -24,3 +24,5 @@ target_link_libraries(score PUBLIC flecs movement)
 add_library(server STATIC server.c server.h)
 
 add_library(properties STATIC properties.c properties.h)
+
+add_library(sound STATIC sound.c sound.h)
