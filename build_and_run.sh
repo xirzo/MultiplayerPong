@@ -7,10 +7,10 @@ cmake --build build/
 
 cd build/
 
-./bin/${SERVER} &
+./src/${SERVER} &
 
-./bin/${CLIENT} &
+./src/${CLIENT} &
 
-./bin/${CLIENT} &
+./src/${CLIENT} &
 
 wait

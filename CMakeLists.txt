@@ -24,5 +24,4 @@ else()
 endif(FETCH_LIBS)
 unset(FETCH_LIBS CACHE)
 
-add_subdirectory(bin)
-add_subdirectory(lib)
+add_subdirectory(src)
