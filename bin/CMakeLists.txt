@@ -1,6 +1,7 @@
 add_executable(${PROJECT_NAME} main.c)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC flecs raylib input movement render aabb utils score server properties sound)
+target_link_libraries(${PROJECT_NAME} PUBLIC flecs raylib input movement render
+    aabb utils score server properties sound client_state)
 
 if (NOT MSVC)
     target_link_libraries(${PROJECT_NAME} PUBLIC m)

@@ -26,3 +26,5 @@ add_library(server STATIC server.c server.h)
 add_library(properties STATIC properties.c properties.h)
 
 add_library(sound STATIC sound.c sound.h)
+
+add_library(client_state STATIC client_state.c client_state.h)
