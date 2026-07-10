@@ -24,9 +24,9 @@ typedef struct Input {
   InputBinding bindings[INPUT_ACTIONS_SIZE];
 } Input;
 
-void InitInput(Input *input);
-void UpdateInput(Input *input);
-int IsActionPressed(Input *input, InputAction action);
-int WasActionPressed(Input *input, InputAction action);
+void InitInput(Input* input);
+void UpdateInput(Input* input);
+int IsActionPressed(Input* input, InputAction action);
+int WasActionPressed(Input* input, InputAction action);
 
 #endif  // !INPUT_H

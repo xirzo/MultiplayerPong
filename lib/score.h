@@ -7,6 +7,6 @@ typedef struct Score {
   int value;
 } Score;
 
-void ScoreCountSystem(ecs_iter_t *it);
+void ScoreCountSystem(ecs_iter_t* it);
 
-#endif // !SCORE_H
+#endif  // !SCORE_H

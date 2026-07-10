@@ -1,8 +1,8 @@
 #ifndef RENDER_H
 #define RENDER_H
 
-#include "flecs.h"
 #include <raylib.h>
+#include "flecs.h"
 
 typedef struct RenderableRectangle {
   float width;
@@ -10,6 +10,6 @@ typedef struct RenderableRectangle {
   Color color;
 } RenderableRectangle;
 
-void RenderRectangle(ecs_iter_t *it);
+void RenderRectangle(ecs_iter_t* it);
 
-#endif // !RENDER_H
+#endif  // !RENDER_H

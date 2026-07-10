@@ -5,10 +5,10 @@
 #include "flecs.h"
 
 typedef struct {
-    Sound sound;
+  Sound sound;
 } GameSound;
 
-void BallPaddleSoundOnCollission(ecs_iter_t *it);
-void BallWallSoundOnCollission(ecs_iter_t *it);
+void BallPaddleSoundOnCollission(ecs_iter_t* it);
+void BallWallSoundOnCollission(ecs_iter_t* it);
 
 #endif  // !SOUND_H

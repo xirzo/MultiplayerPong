@@ -30,8 +30,8 @@ typedef struct MovementClamp {
   float upper_limit;
 } MovementClamp;
 
-void MoveBall(ecs_iter_t *it);
-void MovePlayerSystem(ecs_iter_t *it);
-void ClampMovementSystem(ecs_iter_t *it);
+void MoveBall(ecs_iter_t* it);
+void MovePlayerSystem(ecs_iter_t* it);
+void ClampMovementSystem(ecs_iter_t* it);
 
-#endif // !MOVEMENT_H
+#endif  // !MOVEMENT_H

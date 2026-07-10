@@ -9,24 +9,22 @@
 #include "server.h"
 
 int main(void) {
-    if (properties_load_from_file("configuration.game")) {
-        printf("Succesfully loaded properties from configuration file\n");
-        printf(
-            "Server: %s:%d\n", g_Properties.SERVER_IP, g_Properties.SERVER_PORT
-        );
-    } else {
-        printf("Using default settings\n");
-    }
+  if (properties_load_from_file("configuration.game")) {
+    printf("Succesfully loaded properties from configuration file\n");
+    printf("Server: %s:%d\n", g_Properties.SERVER_IP, g_Properties.SERVER_PORT);
+  } else {
+    printf("Using default settings\n");
+  }
 
-    UDPServer *server = sr_create_udp_server(g_Properties.SERVER_PORT);
+  UDPServer* server = sr_create_udp_server(g_Properties.SERVER_PORT);
 
-    if (!server) {
-        fprintf(stderr, "error: Failed to create server\n");
-        return 1;
-    }
+  if (!server) {
+    fprintf(stderr, "error: Failed to create server\n");
+    return 1;
+  }
 
-    sr_start_udp_listen(server);
+  sr_start_udp_listen(server);
 
-    sr_destroy_udp_server(server);
-    return 0;
+  sr_destroy_udp_server(server);
+  return 0;
 }

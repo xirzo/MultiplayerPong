@@ -1,14 +1,14 @@
 #include "movement.h"
-#include "utils.h"
 #include <stddef.h>
+#include "utils.h"
 
-void MoveBall(ecs_iter_t *it) {
-  Position *positions = ecs_field(it, Position, 0);
-  BallMovement *movements = ecs_field(it, BallMovement, 1);
+void MoveBall(ecs_iter_t* it) {
+  Position* positions = ecs_field(it, Position, 0);
+  BallMovement* movements = ecs_field(it, BallMovement, 1);
 
   for (int i = 0; i < it->count; i++) {
-    Position *pos = &positions[i];
-    BallMovement *movement = &movements[i];
+    Position* pos = &positions[i];
+    BallMovement* movement = &movements[i];
 
     if (movement->current_speed < movement->min_speed) {
       movement->current_speed = movement->min_speed;
@@ -29,26 +29,26 @@ void MoveBall(ecs_iter_t *it) {
   }
 }
 
-void MovePlayerSystem(ecs_iter_t *it) {
-  Position *positions = ecs_field(it, Position, 0);
-  PaddleMovement *movements = ecs_field(it, PaddleMovement, 1);
+void MovePlayerSystem(ecs_iter_t* it) {
+  Position* positions = ecs_field(it, Position, 0);
+  PaddleMovement* movements = ecs_field(it, PaddleMovement, 1);
 
   for (int i = 0; i < it->count; i++) {
-    Position *pos = &positions[i];
-    PaddleMovement *movement = &movements[i];
+    Position* pos = &positions[i];
+    PaddleMovement* movement = &movements[i];
 
     pos->x += movement->direction.x * movement->speed * it->delta_time;
     pos->y += movement->direction.y * movement->speed * it->delta_time;
   }
 }
 
-void ClampMovementSystem(ecs_iter_t *it) {
-  Position *positions = ecs_field(it, Position, 0);
-  MovementClamp *clamps = ecs_field(it, MovementClamp, 1);
+void ClampMovementSystem(ecs_iter_t* it) {
+  Position* positions = ecs_field(it, Position, 0);
+  MovementClamp* clamps = ecs_field(it, MovementClamp, 1);
 
   for (int i = 0; i < it->count; i++) {
-    Position *pos = &positions[i];
-    MovementClamp *clamp = &clamps[i];
+    Position* pos = &positions[i];
+    MovementClamp* clamp = &clamps[i];
 
     if (pos->y < clamp->lower_limit) {
       pos->y = clamp->lower_limit;
