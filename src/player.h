@@ -1,8 +1,17 @@
-#ifndef PLAYER_H
-#define PLAYER_H
+#ifndef PLAYER_H_
+#define PLAYER_H_
+
+#include "flecs.h"
+#include "input.h"
 
 typedef struct {
-  int is_main;
+  bool is_main;
 } Player;
 
-#endif  // !PLAYER_H
+typedef struct PlayerInput {
+  InputAction up_action;
+  InputAction down_action;
+  Input* input;
+} PlayerInput;
+
+#endif  // PLAYER_H_

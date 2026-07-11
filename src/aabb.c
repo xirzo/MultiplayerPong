@@ -1,7 +1,6 @@
 #include "aabb.h"
 #include <math.h>
 #include <stddef.h>
-#include <stdio.h>
 #include "movement.h"
 
 int Intersect(float x_1_min, float x_1_max, float y_1_min, float y_1_max,

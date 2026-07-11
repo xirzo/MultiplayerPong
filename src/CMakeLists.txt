@@ -27,9 +27,41 @@ add_library(properties STATIC properties.c properties.h)
 
 add_library(sound STATIC sound.c sound.h)
 
+add_library(network_systems STATIC network_systems.c network_systems.h)
+target_link_libraries(network_systems PUBLIC flecs input movement properties server)
+
+add_library(systems STATIC systems.c systems.h)
+target_link_libraries(systems PUBLIC flecs aabb input movement network_systems render score server sound)
+
+add_library(entities STATIC entities.c entities.h)
+target_link_libraries(entities PUBLIC flecs input movement properties render score sound)
+
+add_library(network STATIC network.c network.h)
+target_link_libraries(network PUBLIC movement properties server)
+
+add_library(components STATIC components.c components.h)
+target_link_libraries(components PUBLIC flecs)
+
 add_executable(${PROJECT_NAME} main_client.c)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC flecs raylib input movement render aabb utils score server properties sound)
+target_link_libraries(${PROJECT_NAME} PUBLIC 
+    flecs 
+    components
+    raylib 
+    input 
+    movement 
+    render 
+    aabb 
+    utils 
+    score 
+    server 
+    properties 
+    sound 
+    systems 
+    entities 
+    network 
+    network_systems
+)
 
 if (NOT MSVC)
     target_link_libraries(${PROJECT_NAME} PUBLIC m)
