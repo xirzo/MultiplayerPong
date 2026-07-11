@@ -39,12 +39,15 @@ target_link_libraries(entities PUBLIC flecs input movement properties render sco
 add_library(network STATIC network.c network.h)
 target_link_libraries(network PUBLIC movement properties server)
 
+add_library(menus STATIC menus.c menus.h)
+
 add_library(components STATIC components.c components.h)
 target_link_libraries(components PUBLIC flecs)
 
 add_executable(${PROJECT_NAME} main_client.c)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC 
+    menus
     flecs 
     components
     raylib 

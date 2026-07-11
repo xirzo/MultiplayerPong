@@ -8,6 +8,7 @@
 #include "flecs.h"
 #include "game_state.h"
 #include "input.h"
+#include "menus.h"
 #include "movement.h"
 #include "network.h"
 #include "properties.h"
@@ -29,14 +30,8 @@ int main(void) {
     return 1;
   }
 
-  if (sr_udp_client_connect(client, g_Properties.SERVER_IP,
-                             g_Properties.SERVER_PORT) != 0) {
-    fprintf(stderr, "Error: Failed to connect to the server\n");
-    fprintf(stderr, "Make sure the server is running on %s:%d\n",
-            g_Properties.SERVER_IP, g_Properties.SERVER_PORT);
-    free(client);
-    return 1;
-  }
+  MenuState menu_state = {0};
+  InitMenuState(&menu_state, "127.0.0.1");
 
   SetTraceLogLevel(LOG_ERROR);
   InitWindow(g_Properties.SCREEN_WIDTH, g_Properties.SCREEN_HEIGHT, "game");
@@ -71,76 +66,87 @@ int main(void) {
   game_state.enemy_entity = CreateEnemyEntity(world);
   game_state.ball_entity = CreateBallEntity(world, collision_sound);
   game_state.upper_wall_entity = CreateWallEntity(world, 0, 0, kUpperWall);
-  game_state.lower_wall_entity = CreateWallEntity(
-      world, 0, g_Properties.SCREEN_HEIGHT, kLowerWall);
+  game_state.lower_wall_entity =
+      CreateWallEntity(world, 0, g_Properties.SCREEN_HEIGHT, kLowerWall);
 
-  while (!WindowShouldClose()) {
-    ServerMessage msg;
-    while (sr_receive_udp_server_message(client, &msg) == 0) {
-      HandleServerMessage(&game_state, &msg);
-    }
-
-    UpdateInput(&player_input);
-
+  while (!WindowShouldClose() && menu_state.current_menu != kQuit) {
     float delta_time = GetFrameTime();
-    ecs_run(world, g_ClampMovementSystem, delta_time, NULL);
-    ecs_run(world, g_ProcessInputSystem, delta_time, (void*)&g_Properties);
-    ecs_run(world, g_MovePlayerSystem, delta_time, NULL);
 
-    if (client->is_main) {
-      ecs_run(world, g_ScoreCountSystem, delta_time, (void*)&g_Properties);
-      ecs_run(world, g_BallPaddleCollisions, delta_time, NULL);
-      ecs_run(world, g_BallPaddleSoundOnCollission, delta_time, NULL);
-      ecs_run(world, g_BallWallSoundOnCollission, delta_time, NULL);
-      ecs_run(world, g_BallWallCollisions, delta_time, NULL);
-      ecs_run(world, g_MoveBall, delta_time, NULL);
-
-      const Position* ball_pos = ecs_get(world, game_state.ball_entity, Position);
-      const ClientMessage ball_msg = {
-          .type = CLIENT_MSG_BALL_POSITION,
-          .data.position = {ball_pos->x, ball_pos->y},
-      };
-      sr_send_udp_message_to_server(client, &ball_msg);
+    if (menu_state.current_menu != kGame) {
+      UpdateMenus(&menu_state, client, g_Properties.SERVER_PORT);
     } else {
-      const Position* current_player_pos =
-          ecs_get(world, game_state.player_entity, Position);
-      if (current_player_pos->x > (float)g_Properties.SCREEN_WIDTH / 2) {
-        ecs_set(world, game_state.player_entity, Position,
-                {.x = g_Properties.PADDLE_SCREEN_SIZE_MARGIN,
-                 .y = current_player_pos->y});
+      ServerMessage msg;
+      while (sr_receive_udp_server_message(client, &msg) == 0) {
+        HandleServerMessage(&game_state, &msg);
       }
-    }
 
-    ecs_run(world, g_SendPlayerPositionSystem, delta_time, client);
+      UpdateInput(&player_input);
+
+      ecs_run(world, g_ClampMovementSystem, delta_time, NULL);
+      ecs_run(world, g_ProcessInputSystem, delta_time, (void*)&g_Properties);
+      ecs_run(world, g_MovePlayerSystem, delta_time, NULL);
+
+      if (client->is_main) {
+        ecs_run(world, g_ScoreCountSystem, delta_time, (void*)&g_Properties);
+        ecs_run(world, g_BallPaddleCollisions, delta_time, NULL);
+        ecs_run(world, g_BallPaddleSoundOnCollission, delta_time, NULL);
+        ecs_run(world, g_BallWallSoundOnCollission, delta_time, NULL);
+        ecs_run(world, g_BallWallCollisions, delta_time, NULL);
+        ecs_run(world, g_MoveBall, delta_time, NULL);
+
+        const Position* ball_pos =
+            ecs_get(world, game_state.ball_entity, Position);
+        const ClientMessage ball_msg = {
+            .type = CLIENT_MSG_BALL_POSITION,
+            .data.position = {ball_pos->x, ball_pos->y},
+        };
+        sr_send_udp_message_to_server(client, &ball_msg);
+      } else {
+        const Position* current_player_pos =
+            ecs_get(world, game_state.player_entity, Position);
+        if (current_player_pos->x > (float)g_Properties.SCREEN_WIDTH / 2) {
+          ecs_set(world, game_state.player_entity, Position,
+                  {.x = g_Properties.PADDLE_SCREEN_SIZE_MARGIN,
+                   .y = current_player_pos->y});
+        }
+      }
+
+      ecs_run(world, g_SendPlayerPositionSystem, delta_time, client);
+    }
 
     BeginDrawing();
     ClearBackground(BLACK);
-    ecs_run(world, g_RenderRectangle, delta_time, NULL);
 
-    DrawRectangle(g_Properties.SCREEN_WIDTH / 2, 0,
-                  g_Properties.MIDDLE_LINE_WIDTH, g_Properties.SCREEN_HEIGHT,
-                  WHITE);
+    if (menu_state.current_menu != kGame) {
+      DrawMenus(&menu_state, g_Properties.SCREEN_WIDTH,
+                g_Properties.SCREEN_HEIGHT);
+    } else {
+      ecs_run(world, g_RenderRectangle, delta_time, NULL);
+
+      DrawRectangle(g_Properties.SCREEN_WIDTH / 2, 0,
+                    g_Properties.MIDDLE_LINE_WIDTH, g_Properties.SCREEN_HEIGHT,
+                    WHITE);
 
 #ifdef DEBUGGING
-    const Position* ball_pos = ecs_get(world, game_state.ball_entity, Position);
-    const Score* left_score =
-        ecs_get(world, game_state.player_entity, Score);
-    const Score* right_score =
-        ecs_get(world, game_state.enemy_entity, Score);
+      const Position* ball_pos =
+          ecs_get(world, game_state.ball_entity, Position);
+      const Score* left_score = ecs_get(world, game_state.player_entity, Score);
+      const Score* right_score = ecs_get(world, game_state.enemy_entity, Score);
 
-    DrawText(
-        TextFormat("Ball Position: x: %.1f, y: %.1f", ball_pos->x, ball_pos->y),
-        10.0f, 15.0f, 20.0f, WHITE);
+      DrawText(TextFormat("Ball Position: x: %.1f, y: %.1f", ball_pos->x,
+                          ball_pos->y),
+               10.0f, 15.0f, 20.0f, WHITE);
 
-    if (client->is_main) {
-      DrawText(TextFormat("Left score: %d", left_score->value), 10.0f, 35.0f,
-               20.0f, WHITE);
-      DrawText(TextFormat("Right score: %d", right_score->value), 10.0f, 55.0f,
-               20.0f, WHITE);
-    }
+      if (client->is_main) {
+        DrawText(TextFormat("Left score: %d", left_score->value), 10.0f, 35.0f,
+                 20.0f, WHITE);
+        DrawText(TextFormat("Right score: %d", right_score->value), 10.0f,
+                 55.0f, 20.0f, WHITE);
+      }
 
-    DrawFPS(10.0f, g_Properties.SCREEN_HEIGHT - 30.0f);
+      DrawFPS(10.0f, g_Properties.SCREEN_HEIGHT - 30.0f);
 #endif
+    }
 
     EndDrawing();
   }
