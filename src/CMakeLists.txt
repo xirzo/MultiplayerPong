@@ -75,3 +75,15 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/src)
 add_executable(pong_server main_server.c)
 target_include_directories(pong_server PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(pong_server PUBLIC server properties)
+
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets
+    )
+
+    install(TARGETS ${PROJECT_NAME} DESTINATION .)
+    install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets DESTINATION .)
+    install(TARGETS pong_server DESTINATION .)
+endif()
